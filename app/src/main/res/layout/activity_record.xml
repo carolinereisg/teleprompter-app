@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#000000">
+
+    <!-- Imagem da câmera (fica por baixo de tudo) -->
+    <androidx.camera.view.PreviewView
+        android:id="@+id/previewView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
+
+    <!-- Teleprompter em tela cheia, com fundo semitransparente -->
+    <ScrollView
+        android:id="@+id/prompterScroll"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scrollbars="none">
+
+        <TextView
+            android:id="@+id/prompterText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:lineSpacingMultiplier="1.25"
+            android:paddingStart="24dp"
+            android:paddingEnd="24dp"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+    </ScrollView>
+
+    <!-- Linha-guia de leitura -->
+    <View
+        android:id="@+id/guideLine"
+        android:layout_width="match_parent"
+        android:layout_height="3dp"
+        android:background="#88E3A857" />
+
+    <!-- Barra superior -->
+    <LinearLayout
+        android:id="@+id/topBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="28dp"
+        android:background="@color/bar_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="6dp">
+
+        <TextView
+            android:id="@+id/timerText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="00:00"
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/gestureIndicator"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:alpha="0.35"
+            android:text="✋"
+            android:textSize="22sp" />
+
+        <TextView
+            android:id="@+id/settingsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:textColor="#FFFFFF"
+            android:textSize="13sp" />
+
+        <Button
+            android:id="@+id/flipBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:background="@drawable/bg_round_button"
+            android:minWidth="48dp"
+            android:paddingHorizontal="10dp"
+            android:text="⟲ Câm."
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF" />
+    </LinearLayout>
+
+    <!-- Contagem regressiva -->
+    <TextView
+        android:id="@+id/countdownText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:shadowColor="#000000"
+        android:shadowRadius="12"
+        android:textColor="#FFFFFF"
+        android:textSize="120sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- Barra inferior -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:layout_marginBottom="24dp"
+        android:background="@color/bar_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:padding="8dp">
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content">
+
+                <Button
+                    android:id="@+id/fontMinus"
+                    style="@style/PromptBtn"
+                    android:text="A−" />
+
+                <Button
+                    android:id="@+id/fontPlus"
+                    style="@style/PromptBtn"
+                    android:text="A+" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp">
+
+                <Button
+                    android:id="@+id/speedMinus"
+                    style="@style/PromptBtn"
+                    android:text="🐢" />
+
+                <Button
+                    android:id="@+id/speedPlus"
+                    style="@style/PromptBtn"
+                    android:text="🐇" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/recordBtn"
+            android:layout_width="76dp"
+            android:layout_height="76dp"
+            android:layout_marginHorizontal="8dp"
+            android:background="@drawable/bg_record"
+            android:text="REC"
+            android:textColor="#FFFFFF"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:orientation="vertical">
+
+            <Button
+                android:id="@+id/pauseBtn"
+                style="@style/PromptBtn"
+                android:layout_width="110dp"
+                android:text="⏸ Pausar" />
+
+            <Button
+                android:id="@+id/playTextBtn"
+                style="@style/PromptBtn"
+                android:layout_width="110dp"
+                android:layout_marginTop="6dp"
+                android:text="▶ Texto" />
+
+            <Button
+                android:id="@+id/rewindBtn"
+                style="@style/PromptBtn"
+                android:layout_width="110dp"
+                android:layout_marginTop="6dp"
+                android:text="⤒ Início" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

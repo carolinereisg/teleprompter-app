@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Ícone: câmera com linhas de texto -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- corpo da câmera -->
+    <path android:fillColor="#FFFFFF"
+        android:pathData="M30,40 h36 a4,4 0 0 1 4,4 v20 a4,4 0 0 1 -4,4 h-36 a4,4 0 0 1 -4,-4 v-20 a4,4 0 0 1 4,-4 z" />
+    <!-- lente lateral -->
+    <path android:fillColor="#FFFFFF" android:pathData="M72,48 L84,41 L84,67 L72,60 Z" />
+    <!-- linhas de texto -->
+    <path android:fillColor="#6B4E9B" android:pathData="M33,47 h28 v3 h-28 z" />
+    <path android:fillColor="#6B4E9B" android:pathData="M33,53 h22 v3 h-22 z" />
+    <path android:fillColor="#6B4E9B" android:pathData="M33,59 h26 v3 h-26 z" />
+</vector>
