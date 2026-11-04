@@ -11,16 +11,30 @@ android {
         applicationId = "com.serenidadelab.teleprompter"
         minSdk = 29
         targetSdk = 35
-        versionCode = 2
-        versionName = "1.1"
+        versionCode = 3
+        versionName = "1.2"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
     }
 
+    // Chave fixa: assim cada nova versão instala por cima da anterior, sem desinstalar
+    signingConfigs {
+        create("fixa") {
+            storeFile = file("teleprompter.keystore")
+            storePassword = "teleprompter"
+            keyAlias = "teleprompter"
+            keyPassword = "teleprompter"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("fixa")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("fixa")
         }
     }
 
