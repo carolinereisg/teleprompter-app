@@ -2,6 +2,8 @@ package com.serenidadelab.teleprompter
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.animation.ObjectAnimator
+import android.animation.ValueAnimator
 import android.content.ContentValues
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
@@ -230,6 +232,10 @@ class RecordActivity : AppCompatActivity() {
         topBar.post {
             (sizeRow.layoutParams as ViewGroup.MarginLayoutParams).topMargin = topBar.bottom
             sizeRow.requestLayout()
+            val pill = findViewById<View>(R.id.statusPill)
+            (pill.layoutParams as ViewGroup.MarginLayoutParams).topMargin =
+                topBar.bottom + (34 * resources.displayMetrics.density).toInt()
+            pill.requestLayout()
         }
         textPanel.visibility = View.VISIBLE // ajuste com a câmera ligada logo ao entrar
         hidePointer(window.decorView)
@@ -987,14 +993,62 @@ class RecordActivity : AppCompatActivity() {
         )
     }
 
+    private var blink: ObjectAnimator? = null
+
+    /** Moldura + selo deixam claro se está gravando, pausado ou parado. */
+    private fun updateStatusIndicators() {
+        val border = findViewById<View>(R.id.statusBorder)
+        val pill = findViewById<TextView>(R.id.statusPill)
+        blink?.cancel()
+        blink = null
+        border.alpha = 1f
+        pill.alpha = 1f
+        when {
+            recording != null && isPaused -> {
+                border.setBackgroundResource(R.drawable.bg_border_pause)
+                border.visibility = View.VISIBLE
+                pill.setBackgroundResource(R.drawable.bg_pill_pause)
+                pill.setTextColor(Color.BLACK)
+                pill.text = "❚❚  PAUSADO"
+                pill.visibility = View.VISIBLE
+                blink = ObjectAnimator.ofFloat(border, View.ALPHA, 1f, 0.25f).apply {
+                    duration = 600
+                    repeatMode = ValueAnimator.REVERSE
+                    repeatCount = ValueAnimator.INFINITE
+                    start()
+                }
+            }
+            recording != null -> {
+                border.setBackgroundResource(R.drawable.bg_border_rec)
+                border.visibility = View.VISIBLE
+                pill.setBackgroundResource(R.drawable.bg_pill_rec)
+                pill.setTextColor(Color.WHITE)
+                pill.text = "●  GRAVANDO"
+                pill.visibility = View.VISIBLE
+            }
+            else -> {
+                border.visibility = View.GONE
+                pill.visibility = View.GONE
+            }
+        }
+    }
+
     private fun updateUi() {
+        updateStatusIndicators()
         val active = recording != null
         recordBtn.text = if (active) "■" else "REC"
         recordBtn.textSize = if (active) 26f else 16f
         recordBtn.isEnabled = !isFinalizing
         pauseBtn.isEnabled = active
         pauseBtn.alpha = if (active) 1f else 0.4f
-        pauseBtn.text = if (isPaused) "▶ Retomar" else "⏸ Pausar"
+        pauseBtn.text = if (isPaused) "▶ RETOMAR" else "❚❚ Pausar"
+        if (isPaused && active) {
+            pauseBtn.setBackgroundResource(R.drawable.bg_pill_pause)
+            pauseBtn.setTextColor(Color.BLACK)
+        } else {
+            pauseBtn.setBackgroundResource(R.drawable.bg_round_button)
+            pauseBtn.setTextColor(Color.WHITE)
+        }
         flipBtn.isEnabled = !active && !isFinalizing
         flipBtn.alpha = if (flipBtn.isEnabled) 1f else 0.4f
         if (!active) updateTimer(0)

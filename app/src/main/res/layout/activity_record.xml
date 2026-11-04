@@ -40,6 +40,28 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Moldura de estado: vermelha = gravando, amarela piscando = pausado -->
+    <View
+        android:id="@+id/statusBorder"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone" />
+
+    <!-- Selo de estado -->
+    <TextView
+        android:id="@+id/statusPill"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="90dp"
+        android:paddingStart="16dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="6dp"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
     <!-- Barra superior -->
     <LinearLayout
         android:id="@+id/topBar"
