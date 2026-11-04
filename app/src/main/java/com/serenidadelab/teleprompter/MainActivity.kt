@@ -4,6 +4,9 @@ import android.Manifest
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.input.InputManager
+import android.provider.Settings
+import android.view.InputDevice
 import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
@@ -52,6 +55,14 @@ class MainActivity : AppCompatActivity() {
     private lateinit var silhouetteSwitch: MaterialSwitch
     private lateinit var gestureSwitch: MaterialSwitch
     private lateinit var remoteGroup: MaterialButtonToggleGroup
+    private lateinit var mouseStatus: TextView
+    private lateinit var adaptiveSwitch: MaterialSwitch
+
+    private val inputDeviceListener = object : InputManager.InputDeviceListener {
+        override fun onInputDeviceAdded(deviceId: Int) = updateMouseStatus()
+        override fun onInputDeviceRemoved(deviceId: Int) = updateMouseStatus()
+        override fun onInputDeviceChanged(deviceId: Int) = updateMouseStatus()
+    }
 
     private val durationIds = listOf(R.id.durFree, R.id.dur30, R.id.dur60, R.id.dur180, R.id.durCustom)
 
@@ -103,6 +114,15 @@ class MainActivity : AppCompatActivity() {
         silhouetteSwitch = findViewById(R.id.silhouetteSwitch)
         gestureSwitch = findViewById(R.id.gestureSwitch)
         remoteGroup = findViewById(R.id.remoteGroup)
+        mouseStatus = findViewById(R.id.mouseStatus)
+        adaptiveSwitch = findViewById(R.id.adaptiveSwitch)
+        findViewById<MaterialButton>(R.id.pairMouseBtn).setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            } catch (_: Exception) {
+                toast("Abra Configurações > Bluetooth para parear o mouse.")
+            }
+        }
 
         loadValues()
 
@@ -178,6 +198,7 @@ class MainActivity : AppCompatActivity() {
         silhouetteSwitch.isChecked = prefs.showSilhouette
         gestureSwitch.isChecked = prefs.gestureEnabled
         remoteGroup.check(if (prefs.remoteChangesSpeed) R.id.btnRemoteSpeed else R.id.btnRemotePos)
+        adaptiveSwitch.isChecked = prefs.adaptivePace
         updateLabels()
         updateStats()
         updateFramingHint()
@@ -200,9 +221,25 @@ class MainActivity : AppCompatActivity() {
         speedSlider.value = prefs.wpm.toFloat()
     }
 
+    override fun onResume() {
+        super.onResume()
+        getSystemService(InputManager::class.java)?.registerInputDeviceListener(inputDeviceListener, null)
+        updateMouseStatus()
+    }
+
     override fun onPause() {
         super.onPause()
+        getSystemService(InputManager::class.java)?.unregisterInputDeviceListener(inputDeviceListener)
         saveSettings()
+    }
+
+    /** Mostra se há um mouse conectado (pareado pelo Bluetooth do Android). */
+    private fun updateMouseStatus() {
+        val mouse = InputDevice.getDeviceIds()
+            .mapNotNull { InputDevice.getDevice(it) }
+            .firstOrNull { !it.isVirtual && it.supportsSource(InputDevice.SOURCE_MOUSE) }
+        mouseStatus.text = if (mouse != null) "✅ Conectado: ${mouse.name}"
+        else "Nenhum mouse conectado. Ligue o mouse e pareie no Bluetooth do celular."
     }
 
     /** Recebe texto enviado por "Compartilhar" de outro app. */
@@ -304,6 +341,7 @@ class MainActivity : AppCompatActivity() {
         prefs.showSilhouette = silhouetteSwitch.isChecked
         prefs.gestureEnabled = gestureSwitch.isChecked
         prefs.remoteChangesSpeed = remoteGroup.checkedButtonId == R.id.btnRemoteSpeed
+        prefs.adaptivePace = adaptiveSwitch.isChecked
     }
 
     private fun onStartClicked() {

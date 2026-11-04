@@ -426,6 +426,34 @@
 
                     <TextView
                         style="@style/FieldLabel"
+                        android:text="🖱 Mouse Bluetooth (ex.: MX Anywhere)" />
+
+                    <TextView
+                        android:id="@+id/mouseStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="2dp"
+                        android:textSize="13sp" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/pairMouseBtn"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Parear mouse no Bluetooth" />
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:text="Clique esquerdo: segura / solta o texto.\nRodinha para cima: o texto volta.\nRodinha para baixo: o texto acelera até alcançar sua fala.\nA setinha do mouse fica escondida e os cliques não acionam botões da tela." />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/adaptiveSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Ritmo adaptativo: após 3 correções no mesmo sentido, a velocidade se ajusta sozinha" />
+
+                    <TextView
+                        style="@style/FieldLabel"
                         android:text="Botões de volume ou controle Bluetooth" />
 
                     <com.google.android.material.button.MaterialButtonToggleGroup

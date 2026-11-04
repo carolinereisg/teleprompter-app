@@ -14,7 +14,10 @@ import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
 import android.view.Choreographer
+import android.view.InputDevice
 import android.view.KeyEvent
+import android.view.MotionEvent
+import android.view.PointerIcon
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowManager
@@ -50,6 +53,10 @@ import java.util.Date
 import java.util.Locale
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import kotlin.math.abs
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sign
 
 class RecordActivity : AppCompatActivity() {
 
@@ -93,12 +100,34 @@ class RecordActivity : AppCompatActivity() {
     private var wordCount = 1
     private var pxPerWord = 0f
 
+    // ---------- Correções e ritmo adaptativo ----------
+    /** Pixels de correção ainda a aplicar (positivo = avançar, negativo = voltar). */
+    private var pendingPx = 0f
+    /** Segundos em que o texto esteve rolando. */
+    private var scrollClock = 0f
+    private var wheelAccum = 0f
+    private var episodePx = 0f
+    private var lastEpisodeClock = 0f
+    private var anchorClock = 0f
+    private var streakSign = 0f
+    private var streakCount = 0
+    private var streakPx = 0f
+    private val endEpisode = Runnable { finishEpisode() }
+
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
             if (!scrolling) return
             if (lastFrameNanos != 0L) {
                 val dt = (frameTimeNanos - lastFrameNanos) / 1_000_000_000f
+                scrollClock += dt
                 scrollRemainder += pixelsPerSecond() * dt
+                // Correções da rodinha/controle: aplicadas aos poucos (acelera ou volta temporariamente)
+                if (pendingPx != 0f) {
+                    val step = pendingPx * min(1f, dt * 6f)
+                    pendingPx -= step
+                    if (abs(pendingPx) < 0.5f) pendingPx = 0f
+                    scrollRemainder += step
+                }
                 val dy = scrollRemainder.toInt()
                 if (dy != 0) {
                     scrollView.scrollBy(0, dy)
@@ -182,6 +211,7 @@ class RecordActivity : AppCompatActivity() {
         if (landscape) compactBarsForLandscape()
         setupPrompter()
         setupButtons()
+        hidePointer(window.decorView)
         updateTimer(0)
         updateUi()
 
@@ -330,8 +360,115 @@ class RecordActivity : AppCompatActivity() {
 
     /** Empurra o texto ~2 linhas para frente (+1) ou para trás (−1). */
     private fun nudge(direction: Int) {
-        val step = (prompterText.lineHeight * 2 * direction)
-        scrollView.smoothScrollBy(0, step)
+        correct(prompterText.lineHeight * 2f * direction)
+    }
+
+    /** Aplica uma correção de posição e registra para o ritmo adaptativo. */
+    private fun correct(px: Float) {
+        val cap = prompterText.lineHeight * 12f
+        if (scrolling) {
+            pendingPx = (pendingPx + px).coerceIn(-cap, cap)
+        } else {
+            scrollView.smoothScrollBy(0, px.roundToInt())
+        }
+        episodePx += px
+        handler.removeCallbacks(endEpisode)
+        handler.postDelayed(endEpisode, 1200)
+    }
+
+    /**
+     * Uma "correção" = sequência de giros/toques com pausa de até 1,2 s.
+     * Depois de 3 correções seguidas no mesmo sentido, ajusta a velocidade base
+     * para a média do que foi corrigido.
+     */
+    private fun finishEpisode() {
+        val net = episodePx
+        episodePx = 0f
+        val minPx = prompterText.lineHeight * 0.5f
+        if (!prefs.adaptivePace || !scrolling || abs(net) < minPx || pxPerWord <= 0f) {
+            lastEpisodeClock = scrollClock
+            return
+        }
+        val sg = sign(net)
+        if (sg != streakSign) {
+            streakSign = sg
+            streakCount = 0
+            streakPx = 0f
+            anchorClock = lastEpisodeClock
+        }
+        streakCount++
+        streakPx += net
+        lastEpisodeClock = scrollClock
+
+        if (streakCount >= 3) {
+            val span = scrollClock - anchorClock
+            if (span >= 8f) {
+                val pxPerSec = streakPx / span
+                val deltaWpm = (pxPerSec / pxPerWord * 60f * 0.8f)
+                val rounded = ((deltaWpm / 5f).roundToInt() * 5).coerceIn(-30, 30)
+                if (rounded != 0) {
+                    prefs.wpm = prefs.wpm + rounded
+                    updateSettingsText()
+                    toast("Ritmo ajustado: ${prefs.wpm} ppm")
+                }
+            }
+            streakCount = 0
+            streakPx = 0f
+            anchorClock = scrollClock
+        }
+    }
+
+    /** Clique esquerdo: segura / solta o texto (a gravação continua). */
+    private fun toggleHold() {
+        if (scrolling) stopScroll() else startScroll()
+        toast(if (scrolling) "Texto rolando" else "Texto parado")
+    }
+
+    // ---------- Mouse Bluetooth ----------
+    override fun dispatchGenericMotionEvent(ev: MotionEvent): Boolean {
+        if (ev.isFromSource(InputDevice.SOURCE_CLASS_POINTER) && !ev.isFromSource(InputDevice.SOURCE_TOUCHSCREEN)) {
+            when (ev.actionMasked) {
+                MotionEvent.ACTION_SCROLL -> {
+                    // rodinha para cima (valor positivo) = voltar; para baixo = acelerar/avançar
+                    wheelAccum += ev.getAxisValue(MotionEvent.AXIS_VSCROLL)
+                    val notches = wheelAccum.toInt()
+                    if (notches != 0) {
+                        wheelAccum -= notches
+                        correct(-notches * prompterText.lineHeight * 0.7f)
+                    }
+                    return true
+                }
+                MotionEvent.ACTION_BUTTON_PRESS, MotionEvent.ACTION_BUTTON_RELEASE -> return true
+            }
+        }
+        return super.dispatchGenericMotionEvent(ev)
+    }
+
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        // Cliques do mouse não acionam os botões da tela (evita parar a gravação sem querer)
+        if (ev.isFromSource(InputDevice.SOURCE_MOUSE)) {
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN &&
+                (ev.buttonState == 0 || ev.isButtonPressed(MotionEvent.BUTTON_PRIMARY))
+            ) {
+                toggleHold()
+            }
+            return true
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // Botão direito / laterais do mouse geram "Voltar": não deixa sair da gravação
+        if ((event.keyCode == KeyEvent.KEYCODE_BACK || event.keyCode == KeyEvent.KEYCODE_FORWARD) &&
+            event.isFromSource(InputDevice.SOURCE_MOUSE)
+        ) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    /** Esconde a setinha do mouse na tela de gravação. */
+    private fun hidePointer(v: View) {
+        v.pointerIcon = PointerIcon.getSystemIcon(this, PointerIcon.TYPE_NULL)
+        if (v is ViewGroup) for (i in 0 until v.childCount) hidePointer(v.getChildAt(i))
     }
 
     // ---------- Controle remoto (volume, passador de slides, Bluetooth) ----------

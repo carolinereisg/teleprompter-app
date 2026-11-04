@@ -100,6 +100,11 @@ class Prefs(context: Context) {
         get() = bool("remoteSpeed", false)
         set(v) = putBool("remoteSpeed", v)
 
+    /** Ajusta a velocidade sozinho depois de 3 correções no mesmo sentido. */
+    var adaptivePace: Boolean
+        get() = bool("adaptive", true)
+        set(v) = putBool("adaptive", v)
+
     /** Limite de gravação em segundos (0 = sem limite). */
     val limitSeconds: Int
         get() = when (durationMode) {
