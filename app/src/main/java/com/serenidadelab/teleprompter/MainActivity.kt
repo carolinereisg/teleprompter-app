@@ -4,40 +4,54 @@ import android.Manifest
 import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
 import android.text.Editable
+import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.view.View
-import android.widget.Button
 import android.widget.EditText
-import android.widget.RadioGroup
-import android.widget.SeekBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.appcompat.widget.SwitchCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.button.MaterialButtonToggleGroup
+import com.google.android.material.chip.ChipGroup
+import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.slider.Slider
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var prefs: Prefs
     private lateinit var scriptEdit: EditText
-    private lateinit var charCount: TextView
+    private lateinit var sourceText: TextView
+    private lateinit var statsText: TextView
     private lateinit var fontLabel: TextView
     private lateinit var speedLabel: TextView
     private lateinit var opacityLabel: TextView
-    private lateinit var fontSeek: SeekBar
-    private lateinit var speedSeek: SeekBar
-    private lateinit var opacitySeek: SeekBar
-    private lateinit var durationGroup: RadioGroup
+    private lateinit var fontSlider: Slider
+    private lateinit var speedSlider: Slider
+    private lateinit var opacitySlider: Slider
+    private lateinit var boldSwitch: MaterialSwitch
+    private lateinit var colorsSwitch: MaterialSwitch
+    private lateinit var orientationGroup: MaterialButtonToggleGroup
+    private lateinit var qualityGroup: MaterialButtonToggleGroup
+    private lateinit var durationGroup: ChipGroup
     private lateinit var customRow: View
     private lateinit var customMin: EditText
     private lateinit var customSec: EditText
-    private lateinit var gestureSwitch: SwitchCompat
-    private lateinit var countdownSwitch: SwitchCompat
-    private lateinit var frontSwitch: SwitchCompat
-    private lateinit var landscapeSwitch: SwitchCompat
+    private lateinit var frontSwitch: MaterialSwitch
+    private lateinit var countdownSwitch: MaterialSwitch
+    private lateinit var framingHint: TextView
+    private lateinit var guidesSwitch: MaterialSwitch
+    private lateinit var silhouetteSwitch: MaterialSwitch
+    private lateinit var gestureSwitch: MaterialSwitch
+    private lateinit var remoteGroup: MaterialButtonToggleGroup
 
     private val durationIds = listOf(R.id.durFree, R.id.dur30, R.id.dur60, R.id.dur180, R.id.durCustom)
 
@@ -53,62 +67,125 @@ class MainActivity : AppCompatActivity() {
             }
         }
 
+    private val openDocument =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri != null) importFile(uri)
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        WindowCompat.setDecorFitsSystemWindows(window, false)
         setContentView(R.layout.activity_main)
         prefs = Prefs(this)
+        applyInsets()
 
         scriptEdit = findViewById(R.id.scriptEdit)
-        charCount = findViewById(R.id.charCount)
+        sourceText = findViewById(R.id.sourceText)
+        statsText = findViewById(R.id.statsText)
         fontLabel = findViewById(R.id.fontLabel)
         speedLabel = findViewById(R.id.speedLabel)
         opacityLabel = findViewById(R.id.opacityLabel)
-        fontSeek = findViewById(R.id.fontSeek)
-        speedSeek = findViewById(R.id.speedSeek)
-        opacitySeek = findViewById(R.id.opacitySeek)
+        fontSlider = findViewById(R.id.fontSlider)
+        speedSlider = findViewById(R.id.speedSlider)
+        opacitySlider = findViewById(R.id.opacitySlider)
+        boldSwitch = findViewById(R.id.boldSwitch)
+        colorsSwitch = findViewById(R.id.colorsSwitch)
+        orientationGroup = findViewById(R.id.orientationGroup)
+        qualityGroup = findViewById(R.id.qualityGroup)
         durationGroup = findViewById(R.id.durationGroup)
         customRow = findViewById(R.id.customRow)
         customMin = findViewById(R.id.customMin)
         customSec = findViewById(R.id.customSec)
-        gestureSwitch = findViewById(R.id.gestureSwitch)
-        countdownSwitch = findViewById(R.id.countdownSwitch)
         frontSwitch = findViewById(R.id.frontSwitch)
-        landscapeSwitch = findViewById(R.id.landscapeSwitch)
+        countdownSwitch = findViewById(R.id.countdownSwitch)
+        framingHint = findViewById(R.id.framingHint)
+        guidesSwitch = findViewById(R.id.guidesSwitch)
+        silhouetteSwitch = findViewById(R.id.silhouetteSwitch)
+        gestureSwitch = findViewById(R.id.gestureSwitch)
+        remoteGroup = findViewById(R.id.remoteGroup)
 
-        // Valores salvos
-        scriptEdit.setText(prefs.script)
-        fontSeek.progress = prefs.fontSizeSp
-        speedSeek.progress = prefs.speed
-        opacitySeek.progress = prefs.opacity
-        durationGroup.check(durationIds.getOrElse(prefs.durationMode) { R.id.durFree })
-        customMin.setText((prefs.customSeconds / 60).toString())
-        customSec.setText((prefs.customSeconds % 60).toString())
-        gestureSwitch.isChecked = prefs.gestureEnabled
-        countdownSwitch.isChecked = prefs.countdown
-        frontSwitch.isChecked = prefs.frontCamera
-        landscapeSwitch.isChecked = prefs.landscape
+        loadValues()
 
-        updateLabels()
-        updateCharCount()
-        customRow.visibility = if (prefs.durationMode == 4) View.VISIBLE else View.GONE
-
-        fontSeek.onChange { updateLabels() }
-        speedSeek.onChange { updateLabels() }
-        opacitySeek.onChange { updateLabels() }
-        durationGroup.setOnCheckedChangeListener { _, id ->
-            customRow.visibility = if (id == R.id.durCustom) View.VISIBLE else View.GONE
+        fontSlider.addOnChangeListener { _, _, _ -> updateLabels() }
+        speedSlider.addOnChangeListener { _, _, _ -> updateLabels(); updateStats() }
+        opacitySlider.addOnChangeListener { _, _, _ -> updateLabels() }
+        durationGroup.setOnCheckedStateChangeListener { _, ids ->
+            customRow.visibility = if (ids.contains(R.id.durCustom)) View.VISIBLE else View.GONE
         }
+        orientationGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint() }
+        qualityGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint() }
         scriptEdit.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
-            override fun afterTextChanged(s: Editable?) = updateCharCount()
+            override fun afterTextChanged(s: Editable?) = updateStats()
         })
 
-        findViewById<Button>(R.id.pasteBtn).setOnClickListener { pasteFromClipboard() }
-        findViewById<Button>(R.id.clearBtn).setOnClickListener { scriptEdit.setText("") }
-        findViewById<Button>(R.id.startBtn).setOnClickListener { onStartClicked() }
+        findViewById<MaterialButton>(R.id.importBtn).setOnClickListener {
+            openDocument.launch(
+                arrayOf(
+                    "text/plain",
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "application/msword",
+                    "application/octet-stream",
+                )
+            )
+        }
+        findViewById<MaterialButton>(R.id.pasteBtn).setOnClickListener { pasteFromClipboard() }
+        findViewById<MaterialButton>(R.id.clearBtn).setOnClickListener {
+            scriptEdit.setText("")
+            prefs.sourceName = ""
+            sourceText.text = ""
+        }
+        findViewById<MaterialButton>(R.id.startBtn).setOnClickListener { onStartClicked() }
 
         handleSharedText(intent)
+    }
+
+    private fun applyInsets() {
+        val header = findViewById<View>(R.id.header)
+        val bottomBar = findViewById<View>(R.id.bottomBar)
+        val headerTop = header.paddingTop
+        val barBottom = bottomBar.paddingBottom
+        ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.root)) { _, insets ->
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
+            header.setPadding(header.paddingLeft, headerTop + bars.top, header.paddingRight, header.paddingBottom)
+            bottomBar.setPadding(
+                bottomBar.paddingLeft, bottomBar.paddingTop, bottomBar.paddingRight,
+                barBottom + maxOf(bars.bottom, ime.bottom)
+            )
+            insets
+        }
+    }
+
+    private fun loadValues() {
+        setEditorText(prefs.loadScript())
+        sourceText.text = if (prefs.sourceName.isNotEmpty()) "Arquivo: ${prefs.sourceName}" else ""
+        fontSlider.value = prefs.fontSizeSp.toFloat()
+        speedSlider.value = prefs.wpm.toFloat()
+        opacitySlider.value = prefs.opacity.toFloat()
+        boldSwitch.isChecked = prefs.boldAll
+        colorsSwitch.isChecked = prefs.keepColors
+        orientationGroup.check(if (prefs.landscape) R.id.btnLandscape else R.id.btnPortrait)
+        qualityGroup.check(if (prefs.uhd) R.id.btnUhd else R.id.btnFhd)
+        durationGroup.check(durationIds.getOrElse(prefs.durationMode) { R.id.durFree })
+        customMin.setText((prefs.customSeconds / 60).toString())
+        customSec.setText((prefs.customSeconds % 60).toString())
+        customRow.visibility = if (prefs.durationMode == 4) View.VISIBLE else View.GONE
+        frontSwitch.isChecked = prefs.frontCamera
+        countdownSwitch.isChecked = prefs.countdown
+        guidesSwitch.isChecked = prefs.showGuides
+        silhouetteSwitch.isChecked = prefs.showSilhouette
+        gestureSwitch.isChecked = prefs.gestureEnabled
+        remoteGroup.check(if (prefs.remoteChangesSpeed) R.id.btnRemoteSpeed else R.id.btnRemotePos)
+        updateLabels()
+        updateStats()
+        updateFramingHint()
+    }
+
+    /** Mostra o texto no editor já com a aparência de fundo escuro. */
+    private fun setEditorText(text: CharSequence) {
+        scriptEdit.setText(ScriptFormat.forDarkBackground(text, keepColors = true, boldAll = false))
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -119,8 +196,8 @@ class MainActivity : AppCompatActivity() {
     override fun onRestart() {
         super.onRestart()
         // Tamanho/velocidade podem ter sido ajustados durante a gravação
-        fontSeek.progress = prefs.fontSizeSp
-        speedSeek.progress = prefs.speed
+        fontSlider.value = prefs.fontSizeSp.toFloat()
+        speedSlider.value = prefs.wpm.toFloat()
     }
 
     override fun onPause() {
@@ -128,15 +205,34 @@ class MainActivity : AppCompatActivity() {
         saveSettings()
     }
 
-    /** Recebe texto enviado por "Compartilhar" de outro app (Word, Notas, WhatsApp…). */
+    /** Recebe texto enviado por "Compartilhar" de outro app. */
     private fun handleSharedText(intent: Intent?) {
         if (intent?.action == Intent.ACTION_SEND && intent.type == "text/plain") {
-            val shared = intent.getStringExtra(Intent.EXTRA_TEXT)
+            val shared = intent.getCharSequenceExtra(Intent.EXTRA_TEXT)
             if (!shared.isNullOrBlank()) {
-                scriptEdit.setText(shared)
-                toast("Texto recebido.")
+                setEditorText(shared)
+                prefs.sourceName = ""
+                sourceText.text = "Texto recebido por compartilhamento"
             }
         }
+    }
+
+    private fun importFile(uri: Uri) {
+        toast("Importando…")
+        Thread {
+            try {
+                val result = DocumentImporter.import(this, uri)
+                runOnUiThread {
+                    setEditorText(result.text)
+                    prefs.sourceName = result.name
+                    sourceText.text = "Arquivo: ${result.name}"
+                    saveSettings()
+                    toast("Importado: ${ScriptFormat.wordCount(result.text)} palavras.")
+                }
+            } catch (e: Exception) {
+                runOnUiThread { toast(e.message ?: "Não foi possível ler o arquivo.") }
+            }
+        }.start()
     }
 
     private fun pasteFromClipboard() {
@@ -146,23 +242,42 @@ class MainActivity : AppCompatActivity() {
             toast("A área de transferência está vazia.")
             return
         }
-        val text = clip.getItemAt(0).coerceToText(this).toString()
-        scriptEdit.setText(text)
-        toast("Texto colado (${text.length} caracteres).")
+        val item = clip.getItemAt(0)
+        val html = item.htmlText
+        val text: CharSequence = if (!html.isNullOrBlank()) {
+            ScriptFormat.fromHtml(html)
+        } else {
+            item.coerceToText(this)
+        }
+        setEditorText(SpannableStringBuilder(text))
+        prefs.sourceName = ""
+        sourceText.text = if (!html.isNullOrBlank()) "Colado com formatação" else "Colado"
     }
 
     private fun updateLabels() {
-        fontLabel.text = "Tamanho da letra: ${fontSeek.progress}"
-        speedLabel.text = "Velocidade do texto: ${speedSeek.progress}"
-        opacityLabel.text = "Escurecimento do fundo: ${opacitySeek.progress}%  (0% = vídeo totalmente visível)"
+        fontLabel.text = "Tamanho da letra: ${fontSlider.value.toInt()}"
+        speedLabel.text = "Velocidade: ${speedSlider.value.toInt()} palavras por minuto"
+        opacityLabel.text = "Escurecimento do fundo: ${opacitySlider.value.toInt()}%  (0% = vídeo todo visível)"
     }
 
-    private fun updateCharCount() {
-        val text = scriptEdit.text?.toString().orEmpty()
-        val words = text.trim().split(Regex("\\s+")).count { it.isNotEmpty() }
-        // Estimativa de fala: ~140 palavras por minuto
-        val secs = (words / 140.0 * 60).toInt()
-        charCount.text = "$words palavras · cerca de ${secs / 60} min ${secs % 60} s de fala"
+    private fun updateStats() {
+        val words = ScriptFormat.wordCount(scriptEdit.text ?: "")
+        val wpm = speedSlider.value.toInt().coerceAtLeast(1)
+        val secs = (words * 60.0 / wpm).toInt()
+        statsText.text = "$words palavras · cerca de ${secs / 60} min ${secs % 60} s a $wpm ppm"
+    }
+
+    private fun updateFramingHint() {
+        val landscape = orientationGroup.checkedButtonId == R.id.btnLandscape
+        val uhd = qualityGroup.checkedButtonId == R.id.btnUhd
+        framingHint.text = if (landscape) {
+            "Grave na horizontal: o quadro inteiro vira o vídeo do YouTube (16:9) e a faixa central " +
+                "vira o Reels/TikTok (9:16). Fique dentro da silhueta para o mesmo take servir aos dois." +
+                if (uhd) "" else "\nDica: escolha 4K. Em Full HD, o corte vertical fica com só ~600×1080."
+        } else {
+            "Grave na vertical: o quadro inteiro vira o Reels/TikTok (9:16) e a faixa do meio é o corte " +
+                "horizontal (16:9), que fica pequeno. Para usar o mesmo take nos dois, prefira Horizontal + 4K."
+        }
     }
 
     private fun readCustomSeconds(): Int {
@@ -172,43 +287,37 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun saveSettings() {
-        prefs.script = scriptEdit.text?.toString().orEmpty()
-        prefs.fontSizeSp = fontSeek.progress
-        prefs.speed = speedSeek.progress
-        prefs.opacity = opacitySeek.progress
-        prefs.durationMode = durationIds.indexOf(durationGroup.checkedRadioButtonId).coerceAtLeast(0)
+        prefs.saveScript(scriptEdit.text ?: "")
+        prefs.fontSizeSp = fontSlider.value.toInt()
+        prefs.wpm = speedSlider.value.toInt()
+        prefs.opacity = opacitySlider.value.toInt()
+        prefs.boldAll = boldSwitch.isChecked
+        prefs.keepColors = colorsSwitch.isChecked
+        prefs.landscape = orientationGroup.checkedButtonId == R.id.btnLandscape
+        prefs.uhd = qualityGroup.checkedButtonId == R.id.btnUhd
+        prefs.durationMode = durationIds.indexOf(durationGroup.checkedChipId).coerceAtLeast(0)
         val custom = readCustomSeconds()
         if (custom > 0) prefs.customSeconds = custom
-        prefs.gestureEnabled = gestureSwitch.isChecked
-        prefs.countdown = countdownSwitch.isChecked
         prefs.frontCamera = frontSwitch.isChecked
-        prefs.landscape = landscapeSwitch.isChecked
+        prefs.countdown = countdownSwitch.isChecked
+        prefs.showGuides = guidesSwitch.isChecked
+        prefs.showSilhouette = silhouetteSwitch.isChecked
+        prefs.gestureEnabled = gestureSwitch.isChecked
+        prefs.remoteChangesSpeed = remoteGroup.checkedButtonId == R.id.btnRemoteSpeed
     }
 
     private fun onStartClicked() {
-        if (durationGroup.checkedRadioButtonId == R.id.durCustom && readCustomSeconds() <= 0) {
+        if (durationGroup.checkedChipId == R.id.durCustom && readCustomSeconds() <= 0) {
             toast("Informe o tempo personalizado (minutos e/ou segundos).")
             return
         }
-        if (scriptEdit.text.isNullOrBlank()) {
-            toast("Dica: cole o texto antes de abrir a câmera.")
-        }
+        if (scriptEdit.text.isNullOrBlank()) toast("Dica: coloque o texto antes de abrir a câmera.")
         saveSettings()
-        permissionLauncher.launch(
-            arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO)
-        )
+        permissionLauncher.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
     }
 
     private fun hasPermission(p: String) =
         ContextCompat.checkSelfPermission(this, p) == PackageManager.PERMISSION_GRANTED
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
-}
-
-fun SeekBar.onChange(block: (Int) -> Unit) {
-    setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
-        override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) = block(progress)
-        override fun onStartTrackingTouch(seekBar: SeekBar?) {}
-        override fun onStopTrackingTouch(seekBar: SeekBar?) {}
-    })
 }

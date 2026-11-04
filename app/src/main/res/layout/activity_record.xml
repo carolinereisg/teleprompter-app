@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:background="#000000">
 
-    <!-- Imagem da câmera (fica por baixo de tudo) -->
+    <!-- Imagem da câmera: mostra o quadro inteiro que será gravado -->
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
         android:layout_width="match_parent"
@@ -24,8 +24,7 @@
             android:lineSpacingMultiplier="1.25"
             android:paddingStart="24dp"
             android:paddingEnd="24dp"
-            android:textColor="#FFFFFF"
-            android:textStyle="bold" />
+            android:textColor="#FFFFFF" />
     </ScrollView>
 
     <!-- Linha-guia de leitura -->
@@ -34,6 +33,12 @@
         android:layout_width="match_parent"
         android:layout_height="3dp"
         android:background="#88E3A857" />
+
+    <!-- Guias de corte e silhueta (não aparecem no vídeo) -->
+    <com.serenidadelab.teleprompter.FramingOverlay
+        android:id="@+id/framingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent" />
 
     <!-- Barra superior -->
     <LinearLayout
@@ -62,7 +67,7 @@
             android:id="@+id/gestureIndicator"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="10dp"
             android:alpha="0.35"
             android:text="✋"
             android:textSize="22sp" />
@@ -71,9 +76,22 @@
             android:id="@+id/settingsText"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="12dp"
+            android:layout_marginEnd="10dp"
+            android:gravity="end"
             android:textColor="#FFFFFF"
-            android:textSize="13sp" />
+            android:textSize="12sp" />
+
+        <Button
+            android:id="@+id/frameBtn"
+            android:layout_width="wrap_content"
+            android:layout_height="40dp"
+            android:layout_marginEnd="6dp"
+            android:background="@drawable/bg_round_button"
+            android:minWidth="48dp"
+            android:paddingHorizontal="10dp"
+            android:text="▦ Enquadrar"
+            android:textAllCaps="false"
+            android:textColor="#FFFFFF" />
 
         <Button
             android:id="@+id/flipBtn"
@@ -84,7 +102,8 @@
             android:paddingHorizontal="10dp"
             android:text="⟲ Câm."
             android:textAllCaps="false"
-            android:textColor="#FFFFFF" />
+            android:textColor="#FFFFFF"
+            android:textSize="18sp" />
     </LinearLayout>
 
     <!-- Contagem regressiva -->
@@ -113,6 +132,7 @@
         android:padding="8dp">
 
         <LinearLayout
+            android:id="@+id/leftCol"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
@@ -162,6 +182,7 @@
             android:textStyle="bold" />
 
         <LinearLayout
+            android:id="@+id/rightCol"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"

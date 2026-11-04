@@ -6,23 +6,30 @@ import android.content.ContentValues
 import android.content.pm.ActivityInfo
 import android.content.pm.PackageManager
 import android.graphics.Color
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraMetadata
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
 import android.provider.MediaStore
 import android.util.Log
-import android.util.TypedValue
 import android.view.Choreographer
+import android.view.KeyEvent
 import android.view.View
+import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
+import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
+import androidx.camera.core.resolutionselector.AspectRatioStrategy
+import androidx.camera.core.resolutionselector.ResolutionSelector
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.video.FallbackStrategy
 import androidx.camera.video.MediaStoreOutputOptions
@@ -50,6 +57,7 @@ class RecordActivity : AppCompatActivity() {
     private lateinit var scrollView: ScrollView
     private lateinit var prompterText: TextView
     private lateinit var guideLine: View
+    private lateinit var overlay: FramingOverlay
     private lateinit var timerText: TextView
     private lateinit var gestureIndicator: TextView
     private lateinit var settingsText: TextView
@@ -58,6 +66,7 @@ class RecordActivity : AppCompatActivity() {
     private lateinit var pauseBtn: Button
     private lateinit var playTextBtn: Button
     private lateinit var flipBtn: Button
+    private lateinit var frameBtn: Button
 
     private var cameraProvider: ProcessCameraProvider? = null
     private var videoCapture: VideoCapture<Recorder>? = null
@@ -65,7 +74,12 @@ class RecordActivity : AppCompatActivity() {
     private var isPaused = false
     private var isFinalizing = false
     private var useFront = true
+    private var cameraChoices: List<Pair<String, CameraSelector>> = emptyList()
+    private var camIndex = -1
     private var limitSec = 0
+    private var landscape = false
+    private var adjustMode = false
+    private var resolutionLabel = ""
 
     private var detector: OpenPalmDetector? = null
     private lateinit var analysisExecutor: ExecutorService
@@ -75,6 +89,8 @@ class RecordActivity : AppCompatActivity() {
     private var scrolling = false
     private var lastFrameNanos = 0L
     private var scrollRemainder = 0f
+    private var wordCount = 1
+    private var pxPerWord = 0f
 
     private val frameCallback = object : Choreographer.FrameCallback {
         override fun doFrame(frameTimeNanos: Long) {
@@ -93,11 +109,16 @@ class RecordActivity : AppCompatActivity() {
         }
     }
 
-    /** Velocidade 1–20 → 10 a 200 dp por segundo. */
-    private fun pixelsPerSecond(): Float =
-        TypedValue.applyDimension(
-            TypedValue.COMPLEX_UNIT_DIP, prefs.speed * 10f, resources.displayMetrics
-        )
+    /** Palavras por minuto → pixels por segundo, de acordo com o texto como está diagramado. */
+    private fun pixelsPerSecond(): Float = prefs.wpm / 60f * pxPerWord
+
+    /** Recalcula quantos pixels de texto correspondem, em média, a uma palavra. */
+    private fun recomputePace() {
+        prompterText.post {
+            val layout = prompterText.layout ?: return@post
+            pxPerWord = layout.height.toFloat() / wordCount.coerceAtLeast(1)
+        }
+    }
 
     private fun startScroll() {
         if (scrolling) return
@@ -117,7 +138,8 @@ class RecordActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         prefs = Prefs(this)
-        requestedOrientation = if (prefs.landscape)
+        landscape = prefs.landscape
+        requestedOrientation = if (landscape)
             ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         else
             ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
@@ -134,6 +156,7 @@ class RecordActivity : AppCompatActivity() {
         scrollView = findViewById(R.id.prompterScroll)
         prompterText = findViewById(R.id.prompterText)
         guideLine = findViewById(R.id.guideLine)
+        overlay = findViewById(R.id.framingOverlay)
         timerText = findViewById(R.id.timerText)
         gestureIndicator = findViewById(R.id.gestureIndicator)
         settingsText = findViewById(R.id.settingsText)
@@ -142,11 +165,20 @@ class RecordActivity : AppCompatActivity() {
         pauseBtn = findViewById(R.id.pauseBtn)
         playTextBtn = findViewById(R.id.playTextBtn)
         flipBtn = findViewById(R.id.flipBtn)
+        frameBtn = findViewById(R.id.frameBtn)
+
+        // Mostra o quadro inteiro que será gravado (sem cortar), para os guias baterem com o vídeo
+        previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
+
+        overlay.landscape = landscape
+        overlay.showGuides = prefs.showGuides
+        overlay.showSilhouette = prefs.showSilhouette
 
         useFront = prefs.frontCamera
         limitSec = prefs.limitSeconds
         analysisExecutor = Executors.newSingleThreadExecutor()
 
+        if (landscape) compactBarsForLandscape()
         setupPrompter()
         setupButtons()
         updateTimer(0)
@@ -193,9 +225,35 @@ class RecordActivity : AppCompatActivity() {
         analysisExecutor.shutdown()
     }
 
+    /** Na horizontal, coloca os botões lado a lado para sobrar mais tela. */
+    private fun compactBarsForLandscape() {
+        for (id in intArrayOf(R.id.leftCol, R.id.rightCol)) {
+            val col = findViewById<LinearLayout>(id)
+            col.orientation = LinearLayout.HORIZONTAL
+            for (i in 0 until col.childCount) {
+                val lp = col.getChildAt(i).layoutParams as ViewGroup.MarginLayoutParams
+                lp.topMargin = 0
+                lp.marginStart = (4 * resources.displayMetrics.density).toInt()
+                col.getChildAt(i).layoutParams = lp
+            }
+        }
+        val bar = findViewById<View>(R.id.bottomBar)
+        (bar.layoutParams as ViewGroup.MarginLayoutParams).bottomMargin =
+            (8 * resources.displayMetrics.density).toInt()
+        (findViewById<View>(R.id.topBar).layoutParams as ViewGroup.MarginLayoutParams).topMargin =
+            (8 * resources.displayMetrics.density).toInt()
+        recordBtn.layoutParams = recordBtn.layoutParams.apply {
+            val s = (60 * resources.displayMetrics.density).toInt()
+            width = s; height = s
+        }
+    }
+
     // ---------- Teleprompter ----------
     private fun setupPrompter() {
-        val text = prefs.script.ifBlank { "Cole o seu texto na tela inicial do app." }
+        val script = prefs.loadScript()
+        val text: CharSequence = if (script.isBlank()) "Cole o seu texto na tela inicial do app." else
+            ScriptFormat.forDarkBackground(script, prefs.keepColors, prefs.boldAll)
+        wordCount = ScriptFormat.wordCount(text).coerceAtLeast(1)
         prompterText.text = text
         prompterText.textSize = prefs.fontSizeSp.toFloat()
         prompterText.setShadowLayer(6f, 0f, 0f, Color.BLACK)
@@ -206,17 +264,20 @@ class RecordActivity : AppCompatActivity() {
         // passarem pela linha-guia (a 25% da altura, perto da câmera frontal).
         scrollView.post {
             val h = scrollView.height
+            val w = scrollView.width
             val guideY = (h * 0.25f).toInt()
-            prompterText.setPadding(
-                prompterText.paddingLeft, guideY, prompterText.paddingRight, h - guideY
-            )
+            // Na horizontal, uma coluna central mais estreita reduz o movimento dos olhos
+            val side = if (landscape) (w * 0.16f).toInt() else prompterText.paddingLeft
+            prompterText.setPadding(side, guideY, side, h - guideY)
             guideLine.translationY = guideY.toFloat()
+            recomputePace()
         }
         updateSettingsText()
     }
 
     private fun updateSettingsText() {
-        settingsText.text = "A ${prefs.fontSizeSp} · Vel ${prefs.speed}"
+        val res = if (resolutionLabel.isNotEmpty()) "\n$resolutionLabel" else ""
+        settingsText.text = "A ${prefs.fontSizeSp} · ${prefs.wpm} ppm$res"
     }
 
     private fun setupButtons() {
@@ -224,32 +285,91 @@ class RecordActivity : AppCompatActivity() {
         pauseBtn.setOnClickListener { togglePause() }
         flipBtn.setOnClickListener {
             if (recording == null && !isFinalizing) {
-                useFront = !useFront
-                bindUseCases()
+                cameraProvider?.let { buildCameraChoices(it) }
+                if (cameraChoices.isNotEmpty()) {
+                    camIndex = (camIndex + 1) % cameraChoices.size
+                    bindUseCases()
+                    toast("Câmera: ${cameraChoices[camIndex].first}")
+                }
             }
         }
+        frameBtn.setOnClickListener { toggleAdjustMode() }
         playTextBtn.setOnClickListener {
             // Rolar o texto sem gravar (para ensaiar) ou pausar só o texto
             if (scrolling) stopScroll() else startScroll()
         }
-        findViewById<Button>(R.id.rewindBtn).setOnClickListener {
-            scrollView.smoothScrollTo(0, 0)
-        }
+        findViewById<Button>(R.id.rewindBtn).setOnClickListener { scrollView.smoothScrollTo(0, 0) }
         findViewById<Button>(R.id.fontMinus).setOnClickListener { changeFont(-2) }
         findViewById<Button>(R.id.fontPlus).setOnClickListener { changeFont(+2) }
-        findViewById<Button>(R.id.speedMinus).setOnClickListener { changeSpeed(-1) }
-        findViewById<Button>(R.id.speedPlus).setOnClickListener { changeSpeed(+1) }
+        findViewById<Button>(R.id.speedMinus).setOnClickListener { changeSpeed(-10) }
+        findViewById<Button>(R.id.speedPlus).setOnClickListener { changeSpeed(+10) }
+    }
+
+    /** Modo ajuste: esconde o texto e destaca silhueta e área de corte. */
+    private fun toggleAdjustMode() {
+        adjustMode = !adjustMode
+        overlay.adjustMode = adjustMode
+        val vis = if (adjustMode) View.INVISIBLE else View.VISIBLE
+        scrollView.visibility = vis
+        guideLine.visibility = vis
+        frameBtn.text = if (adjustMode) "✓ Pronto" else "▦ Enquadrar"
     }
 
     private fun changeFont(delta: Int) {
         prefs.fontSizeSp = prefs.fontSizeSp + delta
         prompterText.textSize = prefs.fontSizeSp.toFloat()
+        recomputePace()
         updateSettingsText()
     }
 
     private fun changeSpeed(delta: Int) {
-        prefs.speed = prefs.speed + delta
+        prefs.wpm = prefs.wpm + delta
         updateSettingsText()
+    }
+
+    /** Empurra o texto ~2 linhas para frente (+1) ou para trás (−1). */
+    private fun nudge(direction: Int) {
+        val step = (prompterText.lineHeight * 2 * direction)
+        scrollView.smoothScrollBy(0, step)
+    }
+
+    // ---------- Controle remoto (volume, passador de slides, Bluetooth) ----------
+    private fun isBackKey(k: Int) = k == KeyEvent.KEYCODE_VOLUME_UP || k == KeyEvent.KEYCODE_PAGE_UP ||
+        k == KeyEvent.KEYCODE_DPAD_UP || k == KeyEvent.KEYCODE_DPAD_LEFT ||
+        k == KeyEvent.KEYCODE_MEDIA_PREVIOUS || k == KeyEvent.KEYCODE_MEDIA_REWIND
+
+    private fun isForwardKey(k: Int) = k == KeyEvent.KEYCODE_VOLUME_DOWN || k == KeyEvent.KEYCODE_PAGE_DOWN ||
+        k == KeyEvent.KEYCODE_DPAD_DOWN || k == KeyEvent.KEYCODE_DPAD_RIGHT ||
+        k == KeyEvent.KEYCODE_MEDIA_NEXT || k == KeyEvent.KEYCODE_MEDIA_FAST_FORWARD
+
+    private fun isPlayKey(k: Int) = k == KeyEvent.KEYCODE_MEDIA_PLAY_PAUSE || k == KeyEvent.KEYCODE_MEDIA_PLAY ||
+        k == KeyEvent.KEYCODE_MEDIA_PAUSE || k == KeyEvent.KEYCODE_HEADSETHOOK ||
+        k == KeyEvent.KEYCODE_SPACE || k == KeyEvent.KEYCODE_ENTER ||
+        k == KeyEvent.KEYCODE_DPAD_CENTER || k == KeyEvent.KEYCODE_CAMERA
+
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        when {
+            isBackKey(keyCode) -> {
+                if (prefs.remoteChangesSpeed) changeSpeed(-10) else nudge(-1)
+                return true
+            }
+            isForwardKey(keyCode) -> {
+                if (prefs.remoteChangesSpeed) changeSpeed(+10) else nudge(+1)
+                return true
+            }
+            isPlayKey(keyCode) -> {
+                if (event.repeatCount == 0) {
+                    if (recording != null) togglePause() else if (scrolling) stopScroll() else startScroll()
+                }
+                return true
+            }
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        if (isBackKey(keyCode) || isForwardKey(keyCode) || isPlayKey(keyCode)) return true
+        return super.onKeyUp(keyCode, event)
     }
 
     // ---------- Câmera ----------
@@ -270,21 +390,36 @@ class RecordActivity : AppCompatActivity() {
         val provider = cameraProvider ?: return
         // A tela pode ter sido recriada ao girar para paisagem
         if (isFinishing || isDestroyed) return
-        val selector = if (useFront && provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA))
-            CameraSelector.DEFAULT_FRONT_CAMERA
-        else
-            CameraSelector.DEFAULT_BACK_CAMERA
+        if (cameraChoices.isEmpty()) buildCameraChoices(provider)
+        if (cameraChoices.isEmpty()) {
+            toast("Nenhuma câmera encontrada.")
+            return
+        }
+        if (camIndex !in cameraChoices.indices) {
+            // Câmera USB conectada tem prioridade; senão, frontal ou traseira conforme o menu
+            val usb = cameraChoices.indexOfFirst { it.first.startsWith("USB") }
+            camIndex = when {
+                usb >= 0 -> usb.also { toast("Câmera USB detectada: usando a câmera externa.") }
+                else -> cameraChoices.indexOfFirst { it.first == (if (useFront) "Frontal" else "Traseira") }
+                    .coerceAtLeast(0)
+            }
+        }
+        val selector = cameraChoices[camIndex].second
+        flipBtn.text = "⟲ " + cameraChoices[camIndex].first
 
-        val preview = Preview.Builder().build()
+        // Pré-visualização no mesmo formato 16:9 do vídeo
+        val preview = Preview.Builder()
+            .setResolutionSelector(
+                ResolutionSelector.Builder()
+                    .setAspectRatioStrategy(AspectRatioStrategy.RATIO_16_9_FALLBACK_AUTO_STRATEGY)
+                    .build()
+            )
+            .build()
         preview.setSurfaceProvider(previewView.surfaceProvider)
 
+        val target = if (prefs.uhd) Quality.UHD else Quality.FHD
         val recorder = Recorder.Builder()
-            .setQualitySelector(
-                QualitySelector.from(
-                    Quality.FHD,
-                    FallbackStrategy.lowerQualityOrHigherThan(Quality.SD)
-                )
-            )
+            .setQualitySelector(QualitySelector.from(target, FallbackStrategy.lowerQualityOrHigherThan(target)))
             .build()
         val vc = VideoCapture.withOutput(recorder)
         videoCapture = vc
@@ -312,7 +447,7 @@ class RecordActivity : AppCompatActivity() {
                 provider.unbindAll()
                 provider.bindToLifecycle(this, selector, preview, vc)
                 if (analysis != null) {
-                    toast("Este aparelho não permite gesto e gravação juntos. Use o botão Pausar.")
+                    toast("Este aparelho não permite gesto e gravação juntos. Use o botão Pausar ou o controle.")
                     gestureIndicator.visibility = View.GONE
                 }
             } catch (e2: Exception) {
@@ -320,11 +455,66 @@ class RecordActivity : AppCompatActivity() {
                 toast("Não foi possível iniciar a câmera.")
             }
         }
+        showResolution()
+    }
+
+    /**
+     * Lista as câmeras disponíveis: frontal, traseira e câmeras USB (UVC),
+     * como a Insta360 Link 2, quando o Android do aparelho as reconhece.
+     */
+    @SuppressLint("UnsafeOptInUsageError")
+    private fun buildCameraChoices(provider: ProcessCameraProvider) {
+        val list = mutableListOf<Pair<String, CameraSelector>>()
+        try {
+            if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) list += "Frontal" to CameraSelector.DEFAULT_FRONT_CAMERA
+        } catch (_: Exception) {
+        }
+        try {
+            if (provider.hasCamera(CameraSelector.DEFAULT_BACK_CAMERA)) list += "Traseira" to CameraSelector.DEFAULT_BACK_CAMERA
+        } catch (_: Exception) {
+        }
+        var n = 0
+        for (info in provider.availableCameraInfos) {
+            try {
+                val c2 = Camera2CameraInfo.from(info)
+                val facing = c2.getCameraCharacteristic(CameraCharacteristics.LENS_FACING)
+                if (facing == CameraMetadata.LENS_FACING_EXTERNAL) {
+                    val id = c2.cameraId
+                    val sel = CameraSelector.Builder()
+                        .addCameraFilter { infos -> infos.filter { Camera2CameraInfo.from(it).cameraId == id } }
+                        .build()
+                    n++
+                    list += (if (n == 1) "USB" else "USB $n") to sel
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Falha ao ler câmera", e)
+            }
+        }
+        cameraChoices = list
+    }
+
+    /** Mostra a resolução real do vídeo (ex.: 3840×2160 = 4K). */
+    private fun showResolution() {
+        handler.postDelayed({
+            val size = videoCapture?.resolutionInfo?.resolution
+            if (size != null) {
+                val w = maxOf(size.width, size.height)
+                val h = minOf(size.width, size.height)
+                resolutionLabel = when {
+                    h >= 2160 -> "4K"
+                    h >= 1080 -> "Full HD"
+                    else -> "${w}×$h"
+                }
+                updateSettingsText()
+                if (prefs.uhd && h < 2160) toast("4K não disponível nesta câmera; gravando em $resolutionLabel.")
+            }
+        }, 800)
     }
 
     // ---------- Gravação ----------
     private fun onRecordClicked() {
         if (isFinalizing) return
+        if (adjustMode) toggleAdjustMode()
         if (recording != null) {
             stopRecording()
         } else if (countdownText.visibility == View.VISIBLE) {
@@ -352,8 +542,7 @@ class RecordActivity : AppCompatActivity() {
     @SuppressLint("MissingPermission")
     private fun startRecording() {
         val vc = videoCapture ?: return
-        val name = "Teleprompter_" +
-            SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val name = "Teleprompter_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val values = ContentValues().apply {
             put(MediaStore.MediaColumns.DISPLAY_NAME, name)
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
@@ -370,9 +559,7 @@ class RecordActivity : AppCompatActivity() {
             pending = pending.withAudioEnabled()
         }
         isPaused = false
-        recording = pending.start(ContextCompat.getMainExecutor(this)) { event ->
-            onRecordEvent(event)
-        }
+        recording = pending.start(ContextCompat.getMainExecutor(this)) { event -> onRecordEvent(event) }
         updateUi()
     }
 
@@ -385,9 +572,7 @@ class RecordActivity : AppCompatActivity() {
             is VideoRecordEvent.Status -> {
                 val sec = (event.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
                 updateTimer(sec)
-                if (limitSec > 0 && sec >= limitSec && recording != null) {
-                    stopRecording()
-                }
+                if (limitSec > 0 && sec >= limitSec && recording != null) stopRecording()
             }
             is VideoRecordEvent.Finalize -> {
                 isFinalizing = false

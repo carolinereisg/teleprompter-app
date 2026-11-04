@@ -1,243 +1,486 @@
 <?xml version="1.0" encoding="utf-8"?>
-<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:orientation="vertical">
 
+    <!-- Cabeçalho -->
     <LinearLayout
+        android:id="@+id/header"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:background="@drawable/bg_header"
         android:orientation="vertical"
-        android:padding="20dp">
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="Teleprompter"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:textColor="@color/brand" />
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingBottom="20dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:text="Texto do roteiro"
+            android:text="🎬  Teleprompter"
+            android:textColor="#FFFFFF"
+            android:textSize="26sp"
             android:textStyle="bold" />
 
-        <EditText
-            android:id="@+id/scriptEdit"
-            android:layout_width="match_parent"
-            android:layout_height="260dp"
-            android:layout_marginTop="6dp"
-            android:gravity="top|start"
-            android:hint="Cole ou digite aqui o seu texto…"
-            android:importantForAutofill="no"
-            android:inputType="textMultiLine|textCapSentences"
-            android:padding="10dp"
-            android:scrollbars="vertical" />
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:alpha="0.85"
+            android:text="Prepare o roteiro, ajuste e grave."
+            android:textColor="#FFFFFF"
+            android:textSize="14sp" />
+    </LinearLayout>
+
+    <ScrollView
+        android:id="@+id/scroll"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:clipToPadding="false"
+        android:paddingStart="14dp"
+        android:paddingTop="14dp"
+        android:paddingEnd="14dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="horizontal">
+            android:orientation="vertical">
 
-            <Button
-                android:id="@+id/pasteBtn"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Colar texto" />
+            <!-- 1. ROTEIRO -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
 
-            <Button
-                android:id="@+id/clearBtn"
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Limpar" />
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="1 · Roteiro" />
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:text="Importe um arquivo Word (.docx) ou .txt, cole ou digite. Negrito, itálico, sublinhado, cores, marca-texto, títulos e centralização são mantidos." />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/importBtn"
+                            style="@style/Widget.Material3.Button.TonalButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1.4"
+                            android:text="📄 Importar Word/TXT" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/pasteBtn"
+                            style="@style/Widget.Material3.Button.OutlinedButton"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginEnd="6dp"
+                            android:layout_weight="1"
+                            android:text="Colar" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/clearBtn"
+                            style="@style/Widget.Material3.Button.TextButton"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Limpar" />
+                    </LinearLayout>
+
+                    <TextView
+                        android:id="@+id/sourceText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textSize="12sp"
+                        android:textStyle="italic" />
+
+                    <EditText
+                        android:id="@+id/scriptEdit"
+                        android:layout_width="match_parent"
+                        android:layout_height="260dp"
+                        android:layout_marginTop="8dp"
+                        android:background="@drawable/bg_editor"
+                        android:gravity="top|start"
+                        android:hint="Seu texto aparece aqui, como vai ficar no teleprompter…"
+                        android:importantForAutofill="no"
+                        android:inputType="textMultiLine|textCapSentences"
+                        android:padding="14dp"
+                        android:scrollbars="vertical"
+                        android:textColor="#FFFFFF"
+                        android:textColorHint="#80FFFFFF"
+                        android:textSize="16sp" />
+
+                    <TextView
+                        android:id="@+id/statsText"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:textSize="12sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 2. LEITURA -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="2 · Leitura" />
+
+                    <TextView
+                        android:id="@+id/fontLabel"
+                        style="@style/FieldLabel" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/fontSlider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:stepSize="2"
+                        android:valueFrom="16"
+                        android:valueTo="96"
+                        app:labelBehavior="gone" />
+
+                    <TextView
+                        android:id="@+id/speedLabel"
+                        style="@style/FieldLabel" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/speedSlider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:stepSize="5"
+                        android:valueFrom="60"
+                        android:valueTo="260"
+                        app:labelBehavior="gone" />
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:text="Fala calma ≈ 110 ppm · conversa ≈ 130 · ritmo rápido ≈ 160. A velocidade acompanha o tamanho da letra automaticamente." />
+
+                    <TextView
+                        android:id="@+id/opacityLabel"
+                        style="@style/FieldLabel" />
+
+                    <com.google.android.material.slider.Slider
+                        android:id="@+id/opacitySlider"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:stepSize="5"
+                        android:valueFrom="0"
+                        android:valueTo="90"
+                        app:labelBehavior="gone" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/boldSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Deixar todo o texto em negrito" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/colorsSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Manter cores e marca-texto do documento" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 3. GRAVAÇÃO -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="3 · Gravação" />
+
+                    <TextView
+                        style="@style/FieldLabel"
+                        android:layout_marginTop="4dp"
+                        android:text="Orientação" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/orientationGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnPortrait"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="▯ Vertical" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnLandscape"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="▭ Horizontal" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        style="@style/FieldLabel"
+                        android:text="Qualidade" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/qualityGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnFhd"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Full HD" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnUhd"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="4K" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        style="@style/FieldLabel"
+                        android:text="Tempo de gravação" />
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/durationGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/durFree"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Livre" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/dur30"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="30 s" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/dur60"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="1 min" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/dur180"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="3 min" />
+
+                        <com.google.android.material.chip.Chip
+                            android:id="@+id/durCustom"
+                            style="@style/Widget.Material3.Chip.Filter"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Personalizado" />
+                    </com.google.android.material.chip.ChipGroup>
+
+                    <LinearLayout
+                        android:id="@+id/customRow"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <EditText
+                            android:id="@+id/customMin"
+                            android:layout_width="70dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:hint="0"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:maxLength="3" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=" min   " />
+
+                        <EditText
+                            android:id="@+id/customSec"
+                            android:layout_width="70dp"
+                            android:layout_height="wrap_content"
+                            android:gravity="center"
+                            android:hint="0"
+                            android:importantForAutofill="no"
+                            android:inputType="number"
+                            android:maxLength="2" />
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text=" s" />
+                    </LinearLayout>
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/frontSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="6dp"
+                        android:text="Começar com a câmera frontal" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/countdownSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Contagem regressiva de 3 s" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 4. ENQUADRAMENTO -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="4 · Enquadramento para cortes" />
+
+                    <TextView
+                        android:id="@+id/framingHint"
+                        style="@style/SectionHint" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/guidesSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mostrar linhas de corte 9:16 e 16:9" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/silhouetteSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mostrar silhueta durante a gravação" />
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:layout_marginTop="6dp"
+                        android:text="Na câmera, o botão ▦ Enquadrar esconde o texto e mostra a silhueta para você se posicionar. As linhas não aparecem no vídeo." />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+            <!-- 5. CONTROLES -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="5 · Controles sem tocar na tela" />
+
+                    <com.google.android.material.materialswitch.MaterialSwitch
+                        android:id="@+id/gestureSwitch"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Mão aberta ✋ pausa / retoma" />
+
+                    <TextView
+                        style="@style/FieldLabel"
+                        android:text="Botões de volume ou controle Bluetooth" />
+
+                    <com.google.android.material.button.MaterialButtonToggleGroup
+                        android:id="@+id/remoteGroup"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        app:selectionRequired="true"
+                        app:singleSelection="true">
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRemotePos"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ajustar posição" />
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnRemoteSpeed"
+                            style="?attr/materialButtonOutlinedStyle"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="Ajustar velocidade" />
+                    </com.google.android.material.button.MaterialButtonToggleGroup>
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:layout_marginTop="6dp"
+                        android:text="▲ / volume + / página anterior: texto volta (ou fica mais lento).\n▼ / volume − / próxima página: texto avança (ou fica mais rápido).\nPlay/Enter: pausa e retoma.\nFunciona com passador de slides Bluetooth, anel controle e disparador de selfie." />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
         </LinearLayout>
+    </ScrollView>
 
-        <TextView
-            android:id="@+id/charCount"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:textSize="12sp" />
+    <!-- Botão principal fixo -->
+    <LinearLayout
+        android:id="@+id/bottomBar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:elevation="8dp"
+        android:background="?android:attr/colorBackground"
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingEnd="16dp"
+        android:paddingBottom="10dp">
 
-        <TextView
-            android:id="@+id/fontLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:textStyle="bold" />
-
-        <SeekBar
-            android:id="@+id/fontSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="16"
-            android:max="96" />
-
-        <TextView
-            android:id="@+id/speedLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:textStyle="bold" />
-
-        <SeekBar
-            android:id="@+id/speedSeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="1"
-            android:max="20" />
-
-        <TextView
-            android:id="@+id/opacityLabel"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="14dp"
-            android:textStyle="bold" />
-
-        <SeekBar
-            android:id="@+id/opacitySeek"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:min="0"
-            android:max="90" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="Tempo de gravação"
-            android:textStyle="bold" />
-
-        <RadioGroup
-            android:id="@+id/durationGroup"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content">
-
-            <RadioButton
-                android:id="@+id/durFree"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Livre (sem limite)" />
-
-            <RadioButton
-                android:id="@+id/dur30"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="30 segundos" />
-
-            <RadioButton
-                android:id="@+id/dur60"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="1 minuto" />
-
-            <RadioButton
-                android:id="@+id/dur180"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="3 minutos" />
-
-            <RadioButton
-                android:id="@+id/durCustom"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Personalizado" />
-        </RadioGroup>
-
-        <LinearLayout
-            android:id="@+id/customRow"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:gravity="center_vertical"
-            android:orientation="horizontal"
-            android:paddingStart="32dp">
-
-            <EditText
-                android:id="@+id/customMin"
-                android:layout_width="70dp"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:hint="0"
-                android:importantForAutofill="no"
-                android:inputType="number"
-                android:maxLength="3" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" min  " />
-
-            <EditText
-                android:id="@+id/customSec"
-                android:layout_width="70dp"
-                android:layout_height="wrap_content"
-                android:gravity="center"
-                android:hint="0"
-                android:importantForAutofill="no"
-                android:inputType="number"
-                android:maxLength="2" />
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text=" s" />
-        </LinearLayout>
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="18dp"
-            android:text="Opções"
-            android:textStyle="bold" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/gestureSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="6dp"
-            android:text="Mão aberta ✋ pausa / retoma a gravação" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/countdownSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="6dp"
-            android:text="Contagem regressiva de 3 s antes de gravar" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/frontSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="6dp"
-            android:text="Começar com a câmera frontal" />
-
-        <androidx.appcompat.widget.SwitchCompat
-            android:id="@+id/landscapeSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:paddingVertical="6dp"
-            android:text="Gravar na horizontal (paisagem)" />
-
-        <Button
+        <com.google.android.material.button.MaterialButton
             android:id="@+id/startBtn"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:layout_marginTop="20dp"
-            android:backgroundTint="@color/brand"
+            android:layout_height="60dp"
             android:text="Abrir câmera"
-            android:textColor="#FFFFFF"
             android:textSize="18sp"
-            android:textStyle="bold" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="10dp"
-            android:text="Os vídeos ficam salvos na galeria, pasta Movies/Teleprompter."
-            android:textSize="12sp" />
+            android:textStyle="bold"
+            app:cornerRadius="30dp" />
     </LinearLayout>
-</ScrollView>
+</LinearLayout>

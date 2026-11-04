@@ -2,25 +2,22 @@
 
 App de gravação de vídeo com teleprompter transparente em tela cheia.
 
-## O que faz
-- Cole textos grandes (botão **Colar texto**, ou "Compartilhar → Teleprompter" a partir de outro app).
-- Ajuste **tamanho da letra**, **velocidade** e **escurecimento do fundo** (0% = vídeo totalmente visível por trás do texto). Letra e velocidade também podem ser ajustadas durante a gravação (A−/A+, 🐢/🐇).
-- **Tempo de gravação:** livre, 30 s, 1 min, 3 min ou personalizado (minutos + segundos). A gravação para sozinha no limite; o tempo pausado não conta.
-- **Mão aberta ✋** na frente da câmera por ~meio segundo pausa a gravação e o texto; mostrar de novo retoma. O ícone ✋ no topo acende quando o app vê uma mão.
-- Contagem regressiva de 3 s, câmera frontal/traseira, retrato ou paisagem.
-- Vídeos salvos em **Galeria → Movies/Teleprompter** (Full HD quando o aparelho permite).
+## Recursos (v1.1)
+- **Menu em 5 seções:** Roteiro · Leitura · Gravação · Enquadramento · Controles.
+- **Roteiro:** importa **Word (.docx)** e **.txt**, cola com formatação ou recebe por "Compartilhar".
+  Mantém negrito, itálico, sublinhado, tachado, cores, marca-texto, tamanhos/títulos, centralização e listas.
+- **Leitura:** tamanho da letra, velocidade em **palavras por minuto** (ajustada automaticamente ao tamanho da letra),
+  escurecimento do fundo, negrito geral, manter cores.
+- **Gravação:** vertical ou horizontal, Full HD ou 4K, tempo livre / 30 s / 1 min / 3 min / personalizado,
+  contagem de 3 s.
+- **Câmeras:** frontal, traseira e **câmera USB (UVC)**, como a Insta360 Link 2, quando o Android do aparelho a reconhece.
+- **Enquadramento para cortes:** linhas 16:9 (YouTube) e 9:16 (Reels/TikTok), silhueta e linha dos olhos.
+  O botão **▦ Enquadrar** esconde o texto para posicionar. As linhas não são gravadas.
+- **Controles sem tocar na tela:** mão aberta ✋ pausa/retoma; botões de volume e controles Bluetooth
+  (passador de slides, anel, disparador de selfie) empurram o texto para frente/trás ou mudam a velocidade.
 
-Requer Android 10 ou superior.
+Requer Android 10 ou superior. Vídeos em Galeria → Movies/Teleprompter.
 
 ## Como gerar o APK
-O APK é compilado automaticamente pelo GitHub Actions a cada envio para o repositório
-(workflow `.github/workflows/build-apk.yml`). Depois de ~5 min:
-- **Releases → latest → teleprompter.apk** (link direto, bom para baixar no celular), ou
-- **Actions → última execução → Artifacts → teleprompter-apk**.
-
-Também abre normalmente no Android Studio (nesse caso, baixe o modelo
-`gesture_recognizer.task` do MediaPipe para `app/src/main/assets/`).
-
-## Instalar no celular
-Baixe o `teleprompter.apk` no celular, toque nele e permita "instalar apps desta fonte"
-quando o Android pedir.
+Cada envio ao GitHub compila o app automaticamente (`.github/workflows/build-apk.yml`).
+Download: **Releases → latest → teleprompter.apk**.
