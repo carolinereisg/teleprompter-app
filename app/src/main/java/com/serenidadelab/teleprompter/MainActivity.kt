@@ -13,6 +13,7 @@ import android.text.SpannableStringBuilder
 import android.text.TextWatcher
 import android.view.InputDevice
 import android.view.View
+import android.view.WindowManager
 import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
@@ -26,6 +27,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.materialswitch.MaterialSwitch
+import com.google.android.material.progressindicator.LinearProgressIndicator
 
 class MainActivity : AppCompatActivity() {
 
@@ -77,6 +79,53 @@ class MainActivity : AppCompatActivity() {
                 toast("O app precisa da permissão de câmera para gravar.")
             }
         }
+
+    private val pickVideo =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
+            if (uri != null) splitVideo(uri)
+        }
+
+    private var splitting = false
+
+    /** Divide o vídeo escolhido em partes abaixo de 398 MB. */
+    private fun splitVideo(uri: Uri) {
+        if (splitting) return
+        splitting = true
+        val bar = findViewById<LinearProgressIndicator>(R.id.splitProgress)
+        val status = findViewById<TextView>(R.id.splitStatus)
+        val btn = findViewById<MaterialButton>(R.id.splitBtn)
+        bar.visibility = View.VISIBLE
+        bar.setProgressCompat(0, false)
+        btn.isEnabled = false
+        status.text = "Preparando…"
+        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        Thread {
+            try {
+                val result = VideoSplitter.split(this, uri) { part, fraction ->
+                    runOnUiThread {
+                        bar.setProgressCompat((fraction * 100).toInt(), true)
+                        status.text = "Salvando parte $part… ${(fraction * 100).toInt()}%"
+                    }
+                }
+                runOnUiThread {
+                    bar.setProgressCompat(100, true)
+                    status.text = "✅ Pronto: ${result.parts} partes de um vídeo de ${result.totalMb} MB.\n" +
+                        "Pasta: ${result.folder}"
+                }
+            } catch (e: Exception) {
+                runOnUiThread {
+                    bar.visibility = View.GONE
+                    status.text = e.message ?: "Não foi possível dividir o vídeo."
+                }
+            } finally {
+                runOnUiThread {
+                    splitting = false
+                    btn.isEnabled = true
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                }
+            }
+        }.start()
+    }
 
     private val openDocument =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri: Uri? ->
@@ -171,6 +220,7 @@ class MainActivity : AppCompatActivity() {
             }
         }
         findViewById<MaterialButton>(R.id.startBtn).setOnClickListener { onStartClicked() }
+        findViewById<MaterialButton>(R.id.splitBtn).setOnClickListener { pickVideo.launch(arrayOf("video/*")) }
 
         handleSharedText(intent)
     }

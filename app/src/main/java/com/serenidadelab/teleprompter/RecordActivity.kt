@@ -23,11 +23,13 @@ import android.view.ViewGroup
 import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
+import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.SeekBar
 import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
 import android.widget.Toast
+import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.core.Camera
@@ -90,6 +92,10 @@ class RecordActivity : AppCompatActivity() {
     private var landscape = false
     private var adjustMode = false
     private var resolutionLabel = ""
+    /** Gravação atual no modo Edição com Claude (para antes de 400 MB). */
+    private var sizeLimited = false
+    /** 0 = guias desligadas, 1 = guias suaves, 2 = modo enquadrar. */
+    private var guideState = 0
 
     private var detector: OpenPalmDetector? = null
     private lateinit var analysisExecutor: ExecutorService
@@ -207,6 +213,7 @@ class RecordActivity : AppCompatActivity() {
         overlay.landscape = landscape
         overlay.showGuides = prefs.showGuides
         overlay.showSilhouette = prefs.showSilhouette
+        guideState = if (prefs.showGuides || prefs.showSilhouette) 1 else 0
 
         useFront = prefs.frontCamera
         limitSec = prefs.limitSeconds
@@ -216,6 +223,14 @@ class RecordActivity : AppCompatActivity() {
         setupPrompter()
         setupButtons()
         setupTextPanel()
+        frameBtn.text = if (guideState == 1) "▦" else "▢"
+        frameBtn.alpha = if (guideState == 0) 0.6f else 1f
+        val topBar = findViewById<View>(R.id.topBar)
+        val sizeRow = findViewById<View>(R.id.sizeRow)
+        topBar.post {
+            (sizeRow.layoutParams as ViewGroup.MarginLayoutParams).topMargin = topBar.bottom
+            sizeRow.requestLayout()
+        }
         textPanel.visibility = View.VISIBLE // ajuste com a câmera ligada logo ao entrar
         hidePointer(window.decorView)
         updateTimer(0)
@@ -418,7 +433,7 @@ class RecordActivity : AppCompatActivity() {
                 }
             }
         }
-        frameBtn.setOnClickListener { toggleAdjustMode() }
+        frameBtn.setOnClickListener { cycleGuides() }
         playTextBtn.setOnClickListener {
             // Rolar o texto sem gravar (para ensaiar) ou pausar só o texto
             if (scrolling) stopScroll() else startScroll()
@@ -430,6 +445,31 @@ class RecordActivity : AppCompatActivity() {
         findViewById<Button>(R.id.speedPlus).setOnClickListener { changeSpeed(+10) }
     }
 
+    /** Botão ▦: guias suaves → modo enquadrar → sem guias. Funciona também durante a gravação. */
+    private fun cycleGuides() {
+        guideState = (guideState + 1) % 3
+        applyGuideState()
+        toast(
+            when (guideState) {
+                1 -> "Guias suaves"
+                2 -> "Modo enquadrar"
+                else -> "Guias desligadas"
+            }
+        )
+    }
+
+    private fun applyGuideState() {
+        if ((guideState == 2) != adjustMode) toggleAdjustMode()
+        overlay.showGuides = guideState >= 1
+        overlay.showSilhouette = guideState >= 1
+        frameBtn.text = when (guideState) {
+            1 -> "▦"
+            2 -> "✓"
+            else -> "▢"
+        }
+        frameBtn.alpha = if (guideState == 0) 0.6f else 1f
+    }
+
     /** Modo ajuste: esconde o texto e destaca silhueta e área de corte. */
     private fun toggleAdjustMode() {
         adjustMode = !adjustMode
@@ -437,7 +477,6 @@ class RecordActivity : AppCompatActivity() {
         val vis = if (adjustMode) View.INVISIBLE else View.VISIBLE
         scrollView.visibility = vis
         guideLine.visibility = vis
-        frameBtn.text = if (adjustMode) "✓" else "▦"
         if (adjustMode) textPanel.visibility = View.GONE
     }
 
@@ -753,7 +792,10 @@ class RecordActivity : AppCompatActivity() {
     // ---------- Gravação ----------
     private fun onRecordClicked() {
         if (isFinalizing) return
-        if (adjustMode) toggleAdjustMode()
+        if (adjustMode) {
+            guideState = 1
+            applyGuideState()
+        }
         textPanel.visibility = View.GONE
         if (recording != null) {
             stopRecording()
@@ -761,11 +803,26 @@ class RecordActivity : AppCompatActivity() {
             // Toque durante a contagem cancela
             handler.removeCallbacksAndMessages(null)
             countdownText.visibility = View.GONE
-        } else if (prefs.countdown) {
-            runCountdown(3)
         } else {
-            startRecording()
+            askRecordingMode()
         }
+    }
+
+    /** Pergunta o modo antes de cada gravação. */
+    private fun askRecordingMode() {
+        val options = arrayOf(
+            "🎬  Normal (sem limite de tamanho)",
+            "✂️  Edição com Claude (para antes de 390 MB)",
+        )
+        AlertDialog.Builder(this)
+            .setTitle("Modo de gravação")
+            .setSingleChoiceItems(options, if (prefs.claudeMode) 1 else 0) { dialog, which ->
+                prefs.claudeMode = which == 1
+                dialog.dismiss()
+                if (prefs.countdown) runCountdown(3) else startRecording()
+            }
+            .setNegativeButton("Cancelar", null)
+            .show()
     }
 
     private fun runCountdown(n: Int) {
@@ -788,9 +845,15 @@ class RecordActivity : AppCompatActivity() {
             put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
             put(MediaStore.MediaColumns.RELATIVE_PATH, "Movies/Teleprompter")
         }
-        val output = MediaStoreOutputOptions.Builder(
+        sizeLimited = prefs.claudeMode
+        val builder = MediaStoreOutputOptions.Builder(
             contentResolver, MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-        ).setContentValues(values).build()
+        ).setContentValues(values)
+        // Trava de segurança: o arquivo nunca passa de 395 MB
+        if (sizeLimited) builder.setFileSizeLimit(HARD_LIMIT_BYTES)
+        val output = builder.build()
+        findViewById<View>(R.id.sizeRow).visibility = if (sizeLimited) View.VISIBLE else View.GONE
+        updateSizeBar(0L, 0f)
 
         var pending = vc.output.prepareRecording(this, output)
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
@@ -813,6 +876,12 @@ class RecordActivity : AppCompatActivity() {
                 val sec = (event.recordingStats.recordedDurationNanos / 1_000_000_000L).toInt()
                 updateTimer(sec)
                 if (limitSec > 0 && sec >= limitSec && recording != null) stopRecording()
+                if (sizeLimited && recording != null) {
+                    val bytes = event.recordingStats.numBytesRecorded
+                    val secs = event.recordingStats.recordedDurationNanos / 1_000_000_000f
+                    updateSizeBar(bytes, secs)
+                    if (bytes >= SOFT_LIMIT_BYTES) stopRecording()
+                }
             }
             is VideoRecordEvent.Finalize -> {
                 isFinalizing = false
@@ -820,7 +889,11 @@ class RecordActivity : AppCompatActivity() {
                 isPaused = false
                 stopScroll()
                 val uri = event.outputResults.outputUri
+                findViewById<View>(R.id.sizeRow).visibility = View.GONE
+                hideSizeCountdown()
                 when {
+                    event.error == VideoRecordEvent.Finalize.ERROR_FILE_SIZE_LIMIT_REACHED ->
+                        toast("Limite de 395 MB atingido. Vídeo salvo.")
                     event.error == VideoRecordEvent.Finalize.ERROR_NONE ->
                         toast("Vídeo salvo na galeria (Movies/Teleprompter).")
                     uri != android.net.Uri.EMPTY ->
@@ -864,6 +937,42 @@ class RecordActivity : AppCompatActivity() {
         }
     }
 
+    // ---------- Modo Edição com Claude: barra de tamanho e contagem final ----------
+    private fun updateSizeBar(bytes: Long, secs: Float) {
+        val bar = findViewById<ProgressBar>(R.id.sizeBar)
+        val label = findViewById<TextView>(R.id.sizeText)
+        bar.progress = (bytes * 1000 / SOFT_LIMIT_BYTES).toInt().coerceIn(0, 1000)
+        val mb = bytes / 1_000_000
+        val limitMb = SOFT_LIMIT_BYTES / 1_000_000
+        if (secs < 2f || bytes <= 0L) {
+            label.text = "$mb / $limitMb MB"
+            return
+        }
+        val rate = bytes / secs // bytes por segundo
+        val remaining = ((SOFT_LIMIT_BYTES - bytes) / rate).toInt().coerceAtLeast(0)
+        label.text = "$mb / $limitMb MB · resta ${fmt(remaining)}"
+        if (remaining <= 10 && !isPaused) {
+            // Contagem regressiva até parar
+            countdownText.textSize = 72f
+            countdownText.setTextColor(Color.rgb(255, 120, 120))
+            countdownText.text = (remaining + 1).toString()
+            countdownText.visibility = View.VISIBLE
+            sizeCountdownShown = true
+        } else {
+            hideSizeCountdown()
+        }
+    }
+
+    private var sizeCountdownShown = false
+
+    private fun hideSizeCountdown() {
+        if (!sizeCountdownShown) return
+        sizeCountdownShown = false
+        countdownText.visibility = View.GONE
+        countdownText.textSize = 120f
+        countdownText.setTextColor(Color.WHITE)
+    }
+
     // ---------- Interface ----------
     private fun updateTimer(sec: Int) {
         val elapsed = fmt(sec)
@@ -897,5 +1006,9 @@ class RecordActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "RecordActivity"
+        /** Para a gravação aqui (≈ 390 MB). */
+        private const val SOFT_LIMIT_BYTES = 390_000_000L
+        /** Trava do gravador, caso algo falhe (≈ 395 MB). */
+        private const val HARD_LIMIT_BYTES = 395_000_000L
     }
 }

@@ -501,6 +501,47 @@
                 </LinearLayout>
             </com.google.android.material.card.MaterialCardView>
 
+            <!-- DIVIDIR VÍDEO -->
+            <com.google.android.material.card.MaterialCardView style="@style/SectionCard">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+                    <TextView
+                        style="@style/SectionTitle"
+                        android:text="✂️  Dividir vídeo grande" />
+
+                    <TextView
+                        style="@style/SectionHint"
+                        android:text="Escolha um vídeo acima de 398 MB. O app faz cópias em partes de ~380 MB (cada uma toca sozinha) e salva em sequência na pasta Movies/Teleprompter/nome_partes. O original não é alterado." />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/splitBtn"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Escolher vídeo para dividir"
+                        app:cornerRadius="16dp" />
+
+                    <com.google.android.material.progressindicator.LinearProgressIndicator
+                        android:id="@+id/splitProgress"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="8dp"
+                        android:max="100"
+                        android:visibility="gone" />
+
+                    <TextView
+                        android:id="@+id/splitStatus"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="4dp"
+                        android:textSize="13sp" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
             <TextView
                 android:id="@+id/footerBrand"
                 android:layout_width="match_parent"

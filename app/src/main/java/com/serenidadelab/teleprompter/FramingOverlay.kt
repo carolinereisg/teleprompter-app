@@ -35,26 +35,26 @@ class FramingOverlay @JvmOverloads constructor(
     private val d = resources.displayMetrics.density
 
     private val framePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 2 * d; color = Color.argb(200, 255, 255, 255)
+        style = Paint.Style.STROKE; strokeWidth = 1 * d; color = Color.WHITE
     }
     private val cropPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 3 * d; color = Color.rgb(227, 168, 87)
+        style = Paint.Style.STROKE; strokeWidth = 1.5f * d; color = Color.rgb(227, 168, 87)
     }
-    private val dimPaint = Paint().apply { color = Color.argb(150, 0, 0, 0) }
-    private val uiZonePaint = Paint().apply { color = Color.argb(70, 255, 82, 82) }
+    private val dimPaint = Paint().apply { color = Color.argb(120, 0, 0, 0) }
+    private val uiZonePaint = Paint().apply { color = Color.argb(45, 255, 82, 82) }
     private val eyePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 1.5f * d; color = Color.argb(200, 120, 220, 255)
-        pathEffect = DashPathEffect(floatArrayOf(10 * d, 8 * d), 0f)
+        style = Paint.Style.STROKE; strokeWidth = 1 * d; color = Color.rgb(120, 220, 255)
+        pathEffect = DashPathEffect(floatArrayOf(6 * d, 10 * d), 0f)
     }
     private val silStroke = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        style = Paint.Style.STROKE; strokeWidth = 3 * d; color = Color.argb(220, 255, 255, 255)
+        style = Paint.Style.STROKE; strokeWidth = 1.5f * d; color = Color.WHITE
         strokeJoin = Paint.Join.ROUND; strokeCap = Paint.Cap.ROUND
-        setShadowLayer(4 * d, 0f, 0f, Color.BLACK)
+        pathEffect = DashPathEffect(floatArrayOf(8 * d, 6 * d), 0f)
     }
-    private val silFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(35, 255, 255, 255) }
+    private val silFill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; textSize = 12 * d; isFakeBoldText = true
-        setShadowLayer(3 * d, 0f, 0f, Color.BLACK)
+        color = Color.WHITE; textSize = 10 * d
+        setShadowLayer(2 * d, 0f, 0f, Color.BLACK)
     }
 
     init {
@@ -90,6 +90,13 @@ class FramingOverlay @JvmOverloads constructor(
         if (width == 0 || (!showGuides && !showSilhouette && !adjustMode)) return
         val f = frameRect()
         val c = cropRect(f)
+        val strong = adjustMode
+        framePaint.alpha = if (strong) 140 else 60
+        cropPaint.alpha = if (strong) 200 else 90
+        eyePaint.alpha = if (strong) 150 else 60
+        silStroke.alpha = if (strong) 170 else 70
+        silFill.alpha = if (strong) 25 else 0
+        labelPaint.alpha = if (strong) 220 else 110
 
         if (adjustMode) {
             // escurece o que só aparece em um dos formatos
@@ -111,7 +118,7 @@ class FramingOverlay @JvmOverloads constructor(
             }
             canvas.drawRect(f, framePaint)
             canvas.drawRect(c, cropPaint)
-            if (adjustMode || showGuides) {
+            if (adjustMode) {
                 val bigLabel = if (landscape) "16:9 YouTube (quadro inteiro)" else "9:16 Reels/TikTok (quadro inteiro)"
                 val smallLabel = if (landscape) "9:16 Reels/TikTok" else "16:9 YouTube"
                 canvas.drawText(bigLabel, f.left + 8 * d, f.bottom - 8 * d, labelPaint)
@@ -167,6 +174,6 @@ class FramingOverlay @JvmOverloads constructor(
 
         // linha dos olhos
         canvas.drawLine(f.left, eyeY, f.right, eyeY, eyePaint)
-        canvas.drawText("olhos", f.left + 8 * d, eyeY - 6 * d, labelPaint)
+        if (adjustMode) canvas.drawText("olhos", f.left + 8 * d, eyeY - 6 * d, labelPaint)
     }
 }

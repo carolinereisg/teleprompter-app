@@ -120,6 +120,38 @@
             android:textSize="18sp" />
     </LinearLayout>
 
+    <!-- Barra de tamanho do arquivo (modo Edição com Claude) -->
+    <LinearLayout
+        android:id="@+id/sizeRow"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top"
+        android:layout_marginTop="84dp"
+        android:background="@color/bar_bg"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingHorizontal="12dp"
+        android:paddingVertical="4dp"
+        android:visibility="gone">
+
+        <ProgressBar
+            android:id="@+id/sizeBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="0dp"
+            android:layout_height="10dp"
+            android:layout_weight="1"
+            android:max="1000"
+            android:progressTint="@color/accent" />
+
+        <TextView
+            android:id="@+id/sizeText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="10dp"
+            android:textColor="#FFFFFF"
+            android:textSize="12sp" />
+    </LinearLayout>
+
     <!-- Painel de ajustes do texto (com a câmera ligada) -->
     <ScrollView
         android:id="@+id/textPanel"

@@ -105,6 +105,11 @@ class Prefs(context: Context) {
         get() = bool("adaptive", true)
         set(v) = putBool("adaptive", v)
 
+    /** Último modo escolhido ao gravar: true = Edição com Claude (arquivo abaixo de 400 MB). */
+    var claudeMode: Boolean
+        get() = bool("claudeMode", false)
+        set(v) = putBool("claudeMode", v)
+
     /** Limite de gravação em segundos (0 = sem limite). */
     val limitSeconds: Int
         get() = when (durationMode) {
