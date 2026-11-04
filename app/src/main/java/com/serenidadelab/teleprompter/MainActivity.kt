@@ -5,13 +5,13 @@ import android.content.ClipboardManager
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.hardware.input.InputManager
-import android.provider.Settings
-import android.view.InputDevice
 import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.text.Editable
 import android.text.SpannableStringBuilder
 import android.text.TextWatcher
+import android.view.InputDevice
 import android.view.View
 import android.widget.EditText
 import android.widget.TextView
@@ -26,7 +26,6 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.chip.ChipGroup
 import com.google.android.material.materialswitch.MaterialSwitch
-import com.google.android.material.slider.Slider
 
 class MainActivity : AppCompatActivity() {
 
@@ -34,14 +33,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var scriptEdit: EditText
     private lateinit var sourceText: TextView
     private lateinit var statsText: TextView
-    private lateinit var fontLabel: TextView
-    private lateinit var speedLabel: TextView
-    private lateinit var opacityLabel: TextView
-    private lateinit var fontSlider: Slider
-    private lateinit var speedSlider: Slider
-    private lateinit var opacitySlider: Slider
-    private lateinit var boldSwitch: MaterialSwitch
-    private lateinit var colorsSwitch: MaterialSwitch
+
+    private lateinit var recContent: View
+    private lateinit var recArrow: TextView
+    private lateinit var recSummary: TextView
     private lateinit var orientationGroup: MaterialButtonToggleGroup
     private lateinit var qualityGroup: MaterialButtonToggleGroup
     private lateinit var durationGroup: ChipGroup
@@ -53,18 +48,23 @@ class MainActivity : AppCompatActivity() {
     private lateinit var framingHint: TextView
     private lateinit var guidesSwitch: MaterialSwitch
     private lateinit var silhouetteSwitch: MaterialSwitch
-    private lateinit var gestureSwitch: MaterialSwitch
-    private lateinit var remoteGroup: MaterialButtonToggleGroup
+
+    private lateinit var ctlContent: View
+    private lateinit var ctlArrow: TextView
+    private lateinit var ctlSummary: TextView
     private lateinit var mouseStatus: TextView
     private lateinit var adaptiveSwitch: MaterialSwitch
+    private lateinit var gestureSwitch: MaterialSwitch
+    private lateinit var remoteGroup: MaterialButtonToggleGroup
+
+    private var mouseName: String? = null
+    private val durationIds = listOf(R.id.durFree, R.id.dur30, R.id.dur60, R.id.dur180, R.id.durCustom)
 
     private val inputDeviceListener = object : InputManager.InputDeviceListener {
         override fun onInputDeviceAdded(deviceId: Int) = updateMouseStatus()
         override fun onInputDeviceRemoved(deviceId: Int) = updateMouseStatus()
         override fun onInputDeviceChanged(deviceId: Int) = updateMouseStatus()
     }
-
-    private val durationIds = listOf(R.id.durFree, R.id.dur30, R.id.dur60, R.id.dur180, R.id.durCustom)
 
     private val permissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
@@ -93,14 +93,9 @@ class MainActivity : AppCompatActivity() {
         scriptEdit = findViewById(R.id.scriptEdit)
         sourceText = findViewById(R.id.sourceText)
         statsText = findViewById(R.id.statsText)
-        fontLabel = findViewById(R.id.fontLabel)
-        speedLabel = findViewById(R.id.speedLabel)
-        opacityLabel = findViewById(R.id.opacityLabel)
-        fontSlider = findViewById(R.id.fontSlider)
-        speedSlider = findViewById(R.id.speedSlider)
-        opacitySlider = findViewById(R.id.opacitySlider)
-        boldSwitch = findViewById(R.id.boldSwitch)
-        colorsSwitch = findViewById(R.id.colorsSwitch)
+        recContent = findViewById(R.id.recContent)
+        recArrow = findViewById(R.id.recArrow)
+        recSummary = findViewById(R.id.recSummary)
         orientationGroup = findViewById(R.id.orientationGroup)
         qualityGroup = findViewById(R.id.qualityGroup)
         durationGroup = findViewById(R.id.durationGroup)
@@ -112,28 +107,40 @@ class MainActivity : AppCompatActivity() {
         framingHint = findViewById(R.id.framingHint)
         guidesSwitch = findViewById(R.id.guidesSwitch)
         silhouetteSwitch = findViewById(R.id.silhouetteSwitch)
-        gestureSwitch = findViewById(R.id.gestureSwitch)
-        remoteGroup = findViewById(R.id.remoteGroup)
+        ctlContent = findViewById(R.id.ctlContent)
+        ctlArrow = findViewById(R.id.ctlArrow)
+        ctlSummary = findViewById(R.id.ctlSummary)
         mouseStatus = findViewById(R.id.mouseStatus)
         adaptiveSwitch = findViewById(R.id.adaptiveSwitch)
-        findViewById<MaterialButton>(R.id.pairMouseBtn).setOnClickListener {
-            try {
-                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
-            } catch (_: Exception) {
-                toast("Abra Configurações > Bluetooth para parear o mouse.")
-            }
-        }
+        gestureSwitch = findViewById(R.id.gestureSwitch)
+        remoteGroup = findViewById(R.id.remoteGroup)
 
         loadValues()
 
-        fontSlider.addOnChangeListener { _, _, _ -> updateLabels() }
-        speedSlider.addOnChangeListener { _, _, _ -> updateLabels(); updateStats() }
-        opacitySlider.addOnChangeListener { _, _, _ -> updateLabels() }
+        // Cartões recolhíveis
+        findViewById<View>(R.id.recHeader).setOnClickListener { toggle(recContent, recArrow) }
+        findViewById<View>(R.id.ctlHeader).setOnClickListener { toggle(ctlContent, ctlArrow) }
+
+        // Assinatura → Instagram
+        val openInstagram = View.OnClickListener {
+            try {
+                startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://www.instagram.com/carolinereisg/")))
+            } catch (_: Exception) {
+                toast("Não foi possível abrir o Instagram.")
+            }
+        }
+        findViewById<View>(R.id.brandLink).setOnClickListener(openInstagram)
+        findViewById<View>(R.id.footerBrand).setOnClickListener(openInstagram)
+
         durationGroup.setOnCheckedStateChangeListener { _, ids ->
             customRow.visibility = if (ids.contains(R.id.durCustom)) View.VISIBLE else View.GONE
+            updateSummaries()
         }
-        orientationGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint() }
-        qualityGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint() }
+        orientationGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint(); updateSummaries() }
+        qualityGroup.addOnButtonCheckedListener { _, _, _ -> updateFramingHint(); updateSummaries() }
+        frontSwitch.setOnCheckedChangeListener { _, _ -> updateSummaries() }
+        gestureSwitch.setOnCheckedChangeListener { _, _ -> updateSummaries() }
+        adaptiveSwitch.setOnCheckedChangeListener { _, _ -> updateSummaries() }
         scriptEdit.addTextChangedListener(object : TextWatcher {
             override fun beforeTextChanged(s: CharSequence?, start: Int, count: Int, after: Int) {}
             override fun onTextChanged(s: CharSequence?, start: Int, before: Int, count: Int) {}
@@ -156,9 +163,22 @@ class MainActivity : AppCompatActivity() {
             prefs.sourceName = ""
             sourceText.text = ""
         }
+        findViewById<MaterialButton>(R.id.pairMouseBtn).setOnClickListener {
+            try {
+                startActivity(Intent(Settings.ACTION_BLUETOOTH_SETTINGS))
+            } catch (_: Exception) {
+                toast("Abra Configurações > Bluetooth para parear o mouse.")
+            }
+        }
         findViewById<MaterialButton>(R.id.startBtn).setOnClickListener { onStartClicked() }
 
         handleSharedText(intent)
+    }
+
+    private fun toggle(content: View, arrow: TextView) {
+        val open = content.visibility != View.VISIBLE
+        content.visibility = if (open) View.VISIBLE else View.GONE
+        arrow.text = if (open) "▴" else "▾"
     }
 
     private fun applyInsets() {
@@ -181,11 +201,6 @@ class MainActivity : AppCompatActivity() {
     private fun loadValues() {
         setEditorText(prefs.loadScript())
         sourceText.text = if (prefs.sourceName.isNotEmpty()) "Arquivo: ${prefs.sourceName}" else ""
-        fontSlider.value = prefs.fontSizeSp.toFloat()
-        speedSlider.value = prefs.wpm.toFloat()
-        opacitySlider.value = prefs.opacity.toFloat()
-        boldSwitch.isChecked = prefs.boldAll
-        colorsSwitch.isChecked = prefs.keepColors
         orientationGroup.check(if (prefs.landscape) R.id.btnLandscape else R.id.btnPortrait)
         qualityGroup.check(if (prefs.uhd) R.id.btnUhd else R.id.btnFhd)
         durationGroup.check(durationIds.getOrElse(prefs.durationMode) { R.id.durFree })
@@ -197,11 +212,11 @@ class MainActivity : AppCompatActivity() {
         guidesSwitch.isChecked = prefs.showGuides
         silhouetteSwitch.isChecked = prefs.showSilhouette
         gestureSwitch.isChecked = prefs.gestureEnabled
-        remoteGroup.check(if (prefs.remoteChangesSpeed) R.id.btnRemoteSpeed else R.id.btnRemotePos)
         adaptiveSwitch.isChecked = prefs.adaptivePace
-        updateLabels()
+        remoteGroup.check(if (prefs.remoteChangesSpeed) R.id.btnRemoteSpeed else R.id.btnRemotePos)
         updateStats()
         updateFramingHint()
+        updateSummaries()
     }
 
     /** Mostra o texto no editor já com a aparência de fundo escuro. */
@@ -214,17 +229,11 @@ class MainActivity : AppCompatActivity() {
         handleSharedText(intent)
     }
 
-    override fun onRestart() {
-        super.onRestart()
-        // Tamanho/velocidade podem ter sido ajustados durante a gravação
-        fontSlider.value = prefs.fontSizeSp.toFloat()
-        speedSlider.value = prefs.wpm.toFloat()
-    }
-
     override fun onResume() {
         super.onResume()
         getSystemService(InputManager::class.java)?.registerInputDeviceListener(inputDeviceListener, null)
         updateMouseStatus()
+        updateStats() // a velocidade pode ter mudado na tela da câmera
     }
 
     override fun onPause() {
@@ -238,8 +247,29 @@ class MainActivity : AppCompatActivity() {
         val mouse = InputDevice.getDeviceIds().toList()
             .mapNotNull { InputDevice.getDevice(it) }
             .firstOrNull { !it.isVirtual && it.supportsSource(InputDevice.SOURCE_MOUSE) }
+        mouseName = mouse?.name
         mouseStatus.text = if (mouse != null) "✅ Conectado: ${mouse.name}"
         else "Nenhum mouse conectado. Ligue o mouse e pareie no Bluetooth do celular."
+        updateSummaries()
+    }
+
+    private fun updateSummaries() {
+        val orient = if (orientationGroup.checkedButtonId == R.id.btnLandscape) "Horizontal" else "Vertical"
+        val quality = if (qualityGroup.checkedButtonId == R.id.btnUhd) "4K" else "Full HD"
+        val time = when (durationGroup.checkedChipId) {
+            R.id.dur30 -> "30 s"
+            R.id.dur60 -> "1 min"
+            R.id.dur180 -> "3 min"
+            R.id.durCustom -> "tempo personalizado"
+            else -> "tempo livre"
+        }
+        val cam = if (frontSwitch.isChecked) "câmera frontal" else "câmera traseira"
+        recSummary.text = "$orient · $quality · $time · $cam"
+
+        val mouse = if (mouseName != null) "Mouse conectado" else "Sem mouse"
+        val hand = if (gestureSwitch.isChecked) "mão aberta ligada" else "mão aberta desligada"
+        val adapt = if (adaptiveSwitch.isChecked) "ritmo adaptativo" else "ritmo fixo"
+        ctlSummary.text = "$mouse · $hand · $adapt"
     }
 
     /** Recebe texto enviado por "Compartilhar" de outro app. */
@@ -291,29 +321,23 @@ class MainActivity : AppCompatActivity() {
         sourceText.text = if (!html.isNullOrBlank()) "Colado com formatação" else "Colado"
     }
 
-    private fun updateLabels() {
-        fontLabel.text = "Tamanho da letra: ${fontSlider.value.toInt()}"
-        speedLabel.text = "Velocidade: ${speedSlider.value.toInt()} palavras por minuto"
-        opacityLabel.text = "Escurecimento do fundo: ${opacitySlider.value.toInt()}%  (0% = vídeo todo visível)"
-    }
-
     private fun updateStats() {
         val words = ScriptFormat.wordCount(scriptEdit.text ?: "")
-        val wpm = speedSlider.value.toInt().coerceAtLeast(1)
+        val wpm = prefs.wpm.coerceAtLeast(1)
         val secs = (words * 60.0 / wpm).toInt()
-        statsText.text = "$words palavras · cerca de ${secs / 60} min ${secs % 60} s a $wpm ppm"
+        statsText.text = "$words palavras · cerca de ${secs / 60} min ${secs % 60} s a $wpm palavras/min"
     }
 
     private fun updateFramingHint() {
         val landscape = orientationGroup.checkedButtonId == R.id.btnLandscape
         val uhd = qualityGroup.checkedButtonId == R.id.btnUhd
         framingHint.text = if (landscape) {
-            "Grave na horizontal: o quadro inteiro vira o vídeo do YouTube (16:9) e a faixa central " +
-                "vira o Reels/TikTok (9:16). Fique dentro da silhueta para o mesmo take servir aos dois." +
+            "O quadro inteiro vira o YouTube (16:9) e a faixa central vira o Reels/TikTok (9:16). " +
+                "Fique dentro da silhueta para o mesmo take servir aos dois." +
                 if (uhd) "" else "\nDica: escolha 4K. Em Full HD, o corte vertical fica com só ~600×1080."
         } else {
-            "Grave na vertical: o quadro inteiro vira o Reels/TikTok (9:16) e a faixa do meio é o corte " +
-                "horizontal (16:9), que fica pequeno. Para usar o mesmo take nos dois, prefira Horizontal + 4K."
+            "O quadro inteiro vira o Reels/TikTok (9:16) e a faixa do meio é o corte horizontal (16:9), " +
+                "que fica pequeno. Para usar o mesmo take nos dois, prefira Horizontal + 4K."
         }
     }
 
@@ -325,11 +349,6 @@ class MainActivity : AppCompatActivity() {
 
     private fun saveSettings() {
         prefs.saveScript(scriptEdit.text ?: "")
-        prefs.fontSizeSp = fontSlider.value.toInt()
-        prefs.wpm = speedSlider.value.toInt()
-        prefs.opacity = opacitySlider.value.toInt()
-        prefs.boldAll = boldSwitch.isChecked
-        prefs.keepColors = colorsSwitch.isChecked
         prefs.landscape = orientationGroup.checkedButtonId == R.id.btnLandscape
         prefs.uhd = qualityGroup.checkedButtonId == R.id.btnUhd
         prefs.durationMode = durationIds.indexOf(durationGroup.checkedChipId).coerceAtLeast(0)
@@ -340,13 +359,14 @@ class MainActivity : AppCompatActivity() {
         prefs.showGuides = guidesSwitch.isChecked
         prefs.showSilhouette = silhouetteSwitch.isChecked
         prefs.gestureEnabled = gestureSwitch.isChecked
-        prefs.remoteChangesSpeed = remoteGroup.checkedButtonId == R.id.btnRemoteSpeed
         prefs.adaptivePace = adaptiveSwitch.isChecked
+        prefs.remoteChangesSpeed = remoteGroup.checkedButtonId == R.id.btnRemoteSpeed
     }
 
     private fun onStartClicked() {
         if (durationGroup.checkedChipId == R.id.durCustom && readCustomSeconds() <= 0) {
             toast("Informe o tempo personalizado (minutos e/ou segundos).")
+            if (recContent.visibility != View.VISIBLE) toggle(recContent, recArrow)
             return
         }
         if (scriptEdit.text.isNullOrBlank()) toast("Dica: coloque o texto antes de abrir a câmera.")

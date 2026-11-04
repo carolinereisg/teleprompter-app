@@ -24,6 +24,8 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.ScrollView
+import android.widget.SeekBar
+import androidx.appcompat.widget.SwitchCompat
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -156,12 +158,14 @@ class RecordActivity : AppCompatActivity() {
         lastFrameNanos = 0L
         Choreographer.getInstance().postFrameCallback(frameCallback)
         playTextBtn.text = "⏸ Texto"
+        if (::panelPlay.isInitialized) panelPlay.text = "⏸ Parar rolagem"
     }
 
     private fun stopScroll() {
         scrolling = false
         Choreographer.getInstance().removeFrameCallback(frameCallback)
         playTextBtn.text = "▶ Texto"
+        if (::panelPlay.isInitialized) panelPlay.text = "▶ Testar rolagem"
     }
 
     // ---------- Ciclo de vida ----------
@@ -211,6 +215,8 @@ class RecordActivity : AppCompatActivity() {
         if (landscape) compactBarsForLandscape()
         setupPrompter()
         setupButtons()
+        setupTextPanel()
+        textPanel.visibility = View.VISIBLE // ajuste com a câmera ligada logo ao entrar
         hidePointer(window.decorView)
         updateTimer(0)
         updateUi()
@@ -281,15 +287,11 @@ class RecordActivity : AppCompatActivity() {
 
     // ---------- Teleprompter ----------
     private fun setupPrompter() {
-        val script = prefs.loadScript()
-        val text: CharSequence = if (script.isBlank()) "Cole o seu texto na tela inicial do app." else
-            ScriptFormat.forDarkBackground(script, prefs.keepColors, prefs.boldAll)
-        wordCount = ScriptFormat.wordCount(text).coerceAtLeast(1)
-        prompterText.text = text
+        script = prefs.loadScript()
+        renderText()
         prompterText.textSize = prefs.fontSizeSp.toFloat()
         prompterText.setShadowLayer(6f, 0f, 0f, Color.BLACK)
-        val alpha = (prefs.opacity / 100f * 255).toInt()
-        scrollView.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
+        applyOpacity()
 
         // Espaço antes/depois do texto para a primeira e a última linha
         // passarem pela linha-guia (a 25% da altura, perto da câmera frontal).
@@ -306,8 +308,100 @@ class RecordActivity : AppCompatActivity() {
         updateSettingsText()
     }
 
+    private var script: CharSequence = ""
+
+    /** Aplica negrito/cores ao roteiro e mostra no teleprompter. */
+    private fun renderText() {
+        val text: CharSequence = if (script.isBlank()) "Cole o seu texto na tela inicial do app." else
+            ScriptFormat.forDarkBackground(script, prefs.keepColors, prefs.boldAll)
+        wordCount = ScriptFormat.wordCount(text).coerceAtLeast(1)
+        prompterText.text = text
+        recomputePace()
+    }
+
+    private fun applyOpacity() {
+        val alpha = (prefs.opacity / 100f * 255).toInt()
+        scrollView.setBackgroundColor(Color.argb(alpha, 0, 0, 0))
+    }
+
+    // ---------- Painel Aa: ajustes do texto com a câmera ligada ----------
+    private lateinit var textPanel: View
+    private lateinit var panelFont: SeekBar
+    private lateinit var panelSpeed: SeekBar
+    private lateinit var panelOpacity: SeekBar
+    private lateinit var panelFontLabel: TextView
+    private lateinit var panelSpeedLabel: TextView
+    private lateinit var panelOpacityLabel: TextView
+    private lateinit var panelPlay: Button
+
+    private fun SeekBar.onChange(block: (Int) -> Unit) {
+        setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) block(progress)
+            }
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {}
+            override fun onStopTrackingTouch(seekBar: SeekBar?) {}
+        })
+    }
+
+    private fun setupTextPanel() {
+        textPanel = findViewById(R.id.textPanel)
+        panelFont = findViewById(R.id.panelFont)
+        panelSpeed = findViewById(R.id.panelSpeed)
+        panelOpacity = findViewById(R.id.panelOpacity)
+        panelFontLabel = findViewById(R.id.panelFontLabel)
+        panelSpeedLabel = findViewById(R.id.panelSpeedLabel)
+        panelOpacityLabel = findViewById(R.id.panelOpacityLabel)
+        panelPlay = findViewById(R.id.panelPlay)
+        val bold = findViewById<SwitchCompat>(R.id.panelBold)
+        val colors = findViewById<SwitchCompat>(R.id.panelColors)
+
+        syncPanel()
+        bold.isChecked = prefs.boldAll
+        colors.isChecked = prefs.keepColors
+
+        panelFont.onChange { p ->
+            prefs.fontSizeSp = 16 + p * 2
+            prompterText.textSize = prefs.fontSizeSp.toFloat()
+            recomputePace()
+            syncPanel()
+            updateSettingsText()
+        }
+        panelSpeed.onChange { p ->
+            prefs.wpm = 60 + p * 5
+            syncPanel()
+            updateSettingsText()
+        }
+        panelOpacity.onChange { p ->
+            prefs.opacity = p * 5
+            applyOpacity()
+            syncPanel()
+        }
+        bold.setOnCheckedChangeListener { _, checked -> prefs.boldAll = checked; renderText() }
+        colors.setOnCheckedChangeListener { _, checked -> prefs.keepColors = checked; renderText() }
+        panelPlay.setOnClickListener { if (scrolling) stopScroll() else startScroll() }
+        findViewById<Button>(R.id.panelClose).setOnClickListener { textPanel.visibility = View.GONE }
+        findViewById<Button>(R.id.textBtn).setOnClickListener {
+            if (adjustMode) toggleAdjustMode()
+            textPanel.visibility = if (textPanel.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+        }
+    }
+
+    /** Atualiza barras e rótulos do painel a partir dos valores atuais. */
+    private fun syncPanel() {
+        if (!::panelFont.isInitialized) return
+        panelFont.progress = (prefs.fontSizeSp - 16) / 2
+        panelSpeed.progress = (prefs.wpm - 60) / 5
+        panelOpacity.progress = prefs.opacity / 5
+        panelFontLabel.text = "Tamanho da letra: ${prefs.fontSizeSp}"
+        panelSpeedLabel.text = "Velocidade: ${prefs.wpm} palavras por minuto"
+        panelOpacityLabel.text = "Escurecimento do fundo: ${prefs.opacity}%"
+    }
+
     private fun updateSettingsText() {
-        val res = if (resolutionLabel.isNotEmpty()) "\n$resolutionLabel" else ""
+        val cam = cameraChoices.getOrNull(camIndex)?.first ?: ""
+        val res = listOf(resolutionLabel, cam).filter { it.isNotEmpty() }.joinToString(" · ")
+            .let { if (it.isNotEmpty()) "\n$it" else "" }
         settingsText.text = "A ${prefs.fontSizeSp} · ${prefs.wpm} ppm$res"
     }
 
@@ -343,7 +437,8 @@ class RecordActivity : AppCompatActivity() {
         val vis = if (adjustMode) View.INVISIBLE else View.VISIBLE
         scrollView.visibility = vis
         guideLine.visibility = vis
-        frameBtn.text = if (adjustMode) "✓ Pronto" else "▦ Enquadrar"
+        frameBtn.text = if (adjustMode) "✓" else "▦"
+        if (adjustMode) textPanel.visibility = View.GONE
     }
 
     private fun changeFont(delta: Int) {
@@ -351,11 +446,13 @@ class RecordActivity : AppCompatActivity() {
         prompterText.textSize = prefs.fontSizeSp.toFloat()
         recomputePace()
         updateSettingsText()
+        syncPanel()
     }
 
     private fun changeSpeed(delta: Int) {
         prefs.wpm = prefs.wpm + delta
         updateSettingsText()
+        syncPanel()
     }
 
     /** Empurra o texto ~2 linhas para frente (+1) ou para trás (−1). */
@@ -409,6 +506,7 @@ class RecordActivity : AppCompatActivity() {
                 if (rounded != 0) {
                     prefs.wpm = prefs.wpm + rounded
                     updateSettingsText()
+                    syncPanel()
                     toast("Ritmo ajustado: ${prefs.wpm} ppm")
                 }
             }
@@ -543,7 +641,7 @@ class RecordActivity : AppCompatActivity() {
             }
         }
         val selector = cameraChoices[camIndex].second
-        flipBtn.text = "⟲ " + cameraChoices[camIndex].first
+        updateSettingsText()
 
         // Pré-visualização no mesmo formato 16:9 do vídeo
         val preview = Preview.Builder()
@@ -656,6 +754,7 @@ class RecordActivity : AppCompatActivity() {
     private fun onRecordClicked() {
         if (isFinalizing) return
         if (adjustMode) toggleAdjustMode()
+        textPanel.visibility = View.GONE
         if (recording != null) {
             stopRecording()
         } else if (countdownText.visibility == View.VISIBLE) {
