@@ -235,7 +235,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Mostra se há um mouse conectado (pareado pelo Bluetooth do Android). */
     private fun updateMouseStatus() {
-        val mouse = InputDevice.getDeviceIds()
+        val mouse = InputDevice.getDeviceIds().toList()
             .mapNotNull { InputDevice.getDevice(it) }
             .firstOrNull { !it.isVirtual && it.supportsSource(InputDevice.SOURCE_MOUSE) }
         mouseStatus.text = if (mouse != null) "✅ Conectado: ${mouse.name}"
