@@ -25,6 +25,7 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -434,8 +435,9 @@ class RecordActivity : AppCompatActivity() {
         } else null
 
         provider.unbindAll()
+        var camera: Camera? = null
         try {
-            if (analysis != null) {
+            camera = if (analysis != null) {
                 provider.bindToLifecycle(this, selector, preview, vc, analysis)
             } else {
                 provider.bindToLifecycle(this, selector, preview, vc)
@@ -445,7 +447,7 @@ class RecordActivity : AppCompatActivity() {
             Log.w(TAG, "Combinação com análise não suportada; seguindo sem gesto", e)
             try {
                 provider.unbindAll()
-                provider.bindToLifecycle(this, selector, preview, vc)
+                camera = provider.bindToLifecycle(this, selector, preview, vc)
                 if (analysis != null) {
                     toast("Este aparelho não permite gesto e gravação juntos. Use o botão Pausar ou o controle.")
                     gestureIndicator.visibility = View.GONE
@@ -455,7 +457,7 @@ class RecordActivity : AppCompatActivity() {
                 toast("Não foi possível iniciar a câmera.")
             }
         }
-        showResolution()
+        showResolution(camera)
     }
 
     /**
@@ -493,22 +495,24 @@ class RecordActivity : AppCompatActivity() {
         cameraChoices = list
     }
 
-    /** Mostra a resolução real do vídeo (ex.: 3840×2160 = 4K). */
-    private fun showResolution() {
-        handler.postDelayed({
-            val size = videoCapture?.resolutionInfo?.resolution
-            if (size != null) {
-                val w = maxOf(size.width, size.height)
-                val h = minOf(size.width, size.height)
-                resolutionLabel = when {
-                    h >= 2160 -> "4K"
-                    h >= 1080 -> "Full HD"
-                    else -> "${w}×$h"
-                }
-                updateSettingsText()
-                if (prefs.uhd && h < 2160) toast("4K não disponível nesta câmera; gravando em $resolutionLabel.")
-            }
-        }, 800)
+    /** Mostra se a câmera escolhida grava em 4K ou Full HD. */
+    @Suppress("DEPRECATION")
+    private fun showResolution(camera: Camera?) {
+        val info = camera?.cameraInfo ?: return
+        val supported = try {
+            QualitySelector.getSupportedQualities(info)
+        } catch (_: Exception) {
+            emptyList()
+        }
+        val has4k = supported.contains(Quality.UHD)
+        resolutionLabel = when {
+            prefs.uhd && has4k -> "4K"
+            supported.contains(Quality.FHD) -> "Full HD"
+            supported.isNotEmpty() -> "HD"
+            else -> ""
+        }
+        updateSettingsText()
+        if (prefs.uhd && !has4k) toast("4K não disponível nesta câmera; gravando em $resolutionLabel.")
     }
 
     // ---------- Gravação ----------
