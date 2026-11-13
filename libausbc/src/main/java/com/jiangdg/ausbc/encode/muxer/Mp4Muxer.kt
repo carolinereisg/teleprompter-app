@@ -243,18 +243,15 @@ class Mp4Muxer(
 
     fun getSavePath() = path
 
+    /**
+     * Teleprompter: o registro antigo na galeria (coluna _data) é bloqueado no Android 11+
+     * ("Mutation of _data is not allowed"). Aqui só avisamos que o arquivo está pronto;
+     * o app copia o vídeo para a galeria pelo MediaStore.
+     */
     private fun insertDCIM(context: Context?, videoPath: String?, notifyOut: Boolean = false) {
-        context?.let { ctx ->
-            if (videoPath.isNullOrEmpty()) {
-                return
-            }
-            ctx.contentResolver.let { content ->
-                val uri = MediaStore.Video.Media.EXTERNAL_CONTENT_URI
-                content.insert(uri, getVideoContentValues(videoPath))
-                mMainHandler.post {
-                    mCaptureCallBack?.onComplete(this.path)
-                }
-            }
+        if (videoPath.isNullOrEmpty()) return
+        mMainHandler.post {
+            mCaptureCallBack?.onComplete(videoPath)
         }
     }
 

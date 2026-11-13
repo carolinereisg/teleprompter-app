@@ -270,6 +270,7 @@ class RecordActivity : AppCompatActivity() {
         }
         gestureIndicator.visibility = if (detector != null) View.VISIBLE else View.GONE
 
+        rescueLeftoverUsbVideos()
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA)
             == PackageManager.PERMISSION_GRANTED
         ) {
@@ -1083,6 +1084,14 @@ class RecordActivity : AppCompatActivity() {
         }
     }
 
+    /** Vídeos USB que ficaram na pasta temporária (ex.: erro de versões anteriores) vão para a galeria. */
+    private fun rescueLeftoverUsbVideos() {
+        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: return
+        val files = dir.listFiles { f -> f.isFile && f.name.endsWith(".mp4") && f.length() > 0 } ?: return
+        if (files.isEmpty()) return
+        Thread { files.forEach { publishToGallery(it) } }.start()
+    }
+
     /** Copia o vídeo gravado para a galeria (Movies/Teleprompter) e apaga a cópia temporária. */
     private fun publishToGallery(file: File) {
         try {
@@ -1097,7 +1106,7 @@ class RecordActivity : AppCompatActivity() {
             contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
             contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
             file.delete()
-            runOnUiThread { toast("Vídeo salvo na galeria (Movies/Teleprompter).") }
+            runOnUiThread { toast("Vídeo salvo na galeria (Movies/Teleprompter): ${file.name}") }
         } catch (e: Exception) {
             Log.e(TAG, "Falha ao salvar vídeo USB", e)
             runOnUiThread { toast("Não foi possível salvar o vídeo: ${e.message}") }

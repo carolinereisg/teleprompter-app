@@ -11,8 +11,8 @@ android {
         applicationId = "com.serenidadelab.teleprompter"
         minSdk = 29
         targetSdk = 35
-        versionCode = 7
-        versionName = "1.6"
+        versionCode = 8
+        versionName = "1.6.1"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
