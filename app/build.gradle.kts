@@ -11,8 +11,8 @@ android {
         applicationId = "com.serenidadelab.teleprompter"
         minSdk = 29
         targetSdk = 35
-        versionCode = 6
-        versionName = "1.5"
+        versionCode = 7
+        versionName = "1.6"
         ndk {
             abiFilters += listOf("arm64-v8a", "armeabi-v7a")
         }
@@ -63,4 +63,6 @@ dependencies {
     implementation("androidx.camera:camera-video:$camerax")
     implementation("androidx.camera:camera-view:$camerax")
     implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    // Câmeras USB (UVC), ex.: Insta360 Link 2 — AndroidUSBCamera (Apache 2.0)
+    implementation(project(":libausbc"))
 }

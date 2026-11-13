@@ -10,6 +10,19 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraMetadata
+import android.hardware.usb.UsbConstants
+import android.hardware.usb.UsbDevice
+import android.hardware.usb.UsbManager
+import android.os.Environment
+import com.jiangdg.ausbc.MultiCameraClient
+import com.jiangdg.ausbc.callback.ICameraStateCallBack
+import com.jiangdg.ausbc.callback.ICaptureCallBack
+import com.jiangdg.ausbc.callback.IDeviceConnectCallBack
+import com.jiangdg.ausbc.camera.CameraUVC
+import com.jiangdg.ausbc.camera.bean.CameraRequest
+import com.jiangdg.ausbc.widget.AspectRatioTextureView
+import com.jiangdg.usb.USBMonitor
+import java.io.File
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -88,7 +101,7 @@ class RecordActivity : AppCompatActivity() {
     private var isPaused = false
     private var isFinalizing = false
     private var useFront = true
-    private var cameraChoices: List<Pair<String, CameraSelector>> = emptyList()
+    private var cameraChoices: List<Pair<String, CameraSelector?>> = emptyList()
     private var camIndex = -1
     private var limitSec = 0
     private var landscape = false
@@ -270,14 +283,31 @@ class RecordActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         // Se o app for para o segundo plano, finaliza e salva o vídeo
-        if (recording != null) stopRecording()
+        if (isActive) stopRecording()
+        if (usbMode) {
+            usbCamera?.closeCamera()
+            usbCamera = null
+            usbRequested = false
+        }
         stopScroll()
         handler.removeCallbacksAndMessages(null)
         countdownText.visibility = View.GONE
     }
 
+    override fun onRestart() {
+        super.onRestart()
+        // Volta do segundo plano: reabre a câmera USB
+        if (usbMode) connectUsbCamera()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
+        try {
+            usbCamera?.closeCamera()
+            usbClient?.unRegister()
+            usbClient?.destroy()
+        } catch (_: Exception) {
+        }
         stopScroll()
         detector?.close()
         analysisExecutor.shutdown()
@@ -430,7 +460,7 @@ class RecordActivity : AppCompatActivity() {
         recordBtn.setOnClickListener { onRecordClicked() }
         pauseBtn.setOnClickListener { togglePause() }
         flipBtn.setOnClickListener {
-            if (recording == null && !isFinalizing) {
+            if (!isActive && !isFinalizing) {
                 cameraProvider?.let { buildCameraChoices(it) }
                 if (cameraChoices.isNotEmpty()) {
                     camIndex = (camIndex + 1) % cameraChoices.size
@@ -640,7 +670,7 @@ class RecordActivity : AppCompatActivity() {
             }
             isPlayKey(keyCode) -> {
                 if (event.repeatCount == 0) {
-                    if (recording != null) togglePause() else if (scrolling) stopScroll() else startScroll()
+                    if (isActive) togglePause() else if (scrolling) stopScroll() else startScroll()
                 }
                 return true
             }
@@ -687,6 +717,11 @@ class RecordActivity : AppCompatActivity() {
         }
         val selector = cameraChoices[camIndex].second
         updateSettingsText()
+        if (selector == null) {
+            enterUsbMode()
+            return
+        }
+        if (usbMode) exitUsbMode()
 
         // Pré-visualização no mesmo formato 16:9 do vídeo
         val preview = Preview.Builder()
@@ -746,7 +781,9 @@ class RecordActivity : AppCompatActivity() {
      */
     @SuppressLint("UnsafeOptInUsageError")
     private fun buildCameraChoices(provider: ProcessCameraProvider) {
-        val list = mutableListOf<Pair<String, CameraSelector>>()
+        val list = mutableListOf<Pair<String, CameraSelector?>>()
+        // Câmera USB pelo driver próprio do app (funciona mesmo se o Android não a reconhece)
+        if (findUvcDevice() != null) list += "USB" to null
         try {
             if (provider.hasCamera(CameraSelector.DEFAULT_FRONT_CAMERA)) list += "Frontal" to CameraSelector.DEFAULT_FRONT_CAMERA
         } catch (_: Exception) {
@@ -766,7 +803,7 @@ class RecordActivity : AppCompatActivity() {
                         .addCameraFilter { infos -> infos.filter { Camera2CameraInfo.from(it).cameraId == id } }
                         .build()
                     n++
-                    list += (if (n == 1) "USB" else "USB $n") to sel
+                    list += (if (n == 1) "USB (sistema)" else "USB (sistema) $n") to sel
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Falha ao ler câmera", e)
@@ -795,6 +832,278 @@ class RecordActivity : AppCompatActivity() {
         if (prefs.uhd && !has4k) toast("4K não disponível nesta câmera; gravando em $resolutionLabel.")
     }
 
+    // ---------- Câmera USB (UVC): Insta360 Link 2 e outras webcams ----------
+    private var usbMode = false
+    private var usbClient: MultiCameraClient? = null
+    private var usbCamera: CameraUVC? = null
+    private var usbRequested = false
+    /** Sessão de gravação USB ativa (inclui quando está pausada). */
+    private var usbSession = false
+    private var usbSegment = 0
+    private var usbSegmentStartMs = 0L
+    private var usbAccumMs = 0L
+    private var usbBaseName = ""
+    private var usbCurrentFile: File? = null
+
+    private val isActive: Boolean
+        get() = recording != null || usbSession
+
+    private fun isUvc(d: UsbDevice): Boolean {
+        if (d.deviceClass == UsbConstants.USB_CLASS_VIDEO) return true
+        for (i in 0 until d.interfaceCount) {
+            if (d.getInterface(i).interfaceClass == UsbConstants.USB_CLASS_VIDEO) return true
+        }
+        return false
+    }
+
+    private fun findUvcDevice(): UsbDevice? =
+        getSystemService(UsbManager::class.java)?.deviceList?.values?.firstOrNull { isUvc(it) }
+
+    private fun enterUsbMode() {
+        usbMode = true
+        cameraProvider?.unbindAll()
+        previewView.visibility = View.INVISIBLE
+        findViewById<View>(R.id.usbContainer).visibility = View.VISIBLE
+        // A câmera USB entrega vídeo horizontal 16:9
+        overlay.landscape = true
+        gestureIndicator.visibility = View.GONE
+        resolutionLabel = ""
+        updateSettingsText()
+        if (usbClient == null) {
+            usbClient = MultiCameraClient(this, usbCallback).also { it.register() }
+        }
+        connectUsbCamera()
+    }
+
+    private fun exitUsbMode() {
+        if (usbSession) usbStopRecording()
+        usbCamera?.closeCamera()
+        usbCamera = null
+        usbRequested = false
+        usbMode = false
+        findViewById<View>(R.id.usbContainer).visibility = View.GONE
+        previewView.visibility = View.VISIBLE
+        overlay.landscape = landscape
+        gestureIndicator.visibility = if (detector != null) View.VISIBLE else View.GONE
+    }
+
+    /** Pede permissão de USB (o Android mostra um aviso na 1ª vez) e abre a câmera. */
+    private fun connectUsbCamera() {
+        val dev = findUvcDevice()
+        if (dev == null) {
+            toast("Câmera USB não encontrada. Confira o cabo e se ela está ligada.")
+            return
+        }
+        if (usbRequested) return
+        usbRequested = true
+        toast("Conectando à câmera USB…")
+        usbClient?.requestPermission(dev)
+    }
+
+    private val usbCallback = object : IDeviceConnectCallBack {
+        override fun onAttachDev(device: UsbDevice?) {
+            if (device != null && usbMode && isUvc(device) && usbCamera == null && !usbRequested) {
+                runOnUiThread { connectUsbCamera() }
+            }
+        }
+
+        override fun onDetachDec(device: UsbDevice?) {
+            if (device != null && device.deviceId == usbCamera?.device?.deviceId) {
+                runOnUiThread {
+                    if (usbSession) usbStopRecording()
+                    usbCamera?.closeCamera()
+                    usbCamera = null
+                    usbRequested = false
+                    toast("Câmera USB desconectada.")
+                }
+            }
+        }
+
+        override fun onConnectDev(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
+            if (device == null || ctrlBlock == null) return
+            runOnUiThread { openUsbCamera(device, ctrlBlock) }
+        }
+
+        override fun onDisConnectDec(device: UsbDevice?, ctrlBlock: USBMonitor.UsbControlBlock?) {
+            runOnUiThread {
+                usbCamera?.closeCamera()
+                usbCamera = null
+                usbRequested = false
+            }
+        }
+
+        override fun onCancelDev(device: UsbDevice?) {
+            runOnUiThread {
+                usbRequested = false
+                toast("Permissão da câmera USB negada. Toque em ⟲ para tentar de novo.")
+            }
+        }
+    }
+
+    private fun openUsbCamera(device: UsbDevice, ctrlBlock: USBMonitor.UsbControlBlock) {
+        if (!usbMode || isDestroyed) return
+        usbCamera?.closeCamera()
+        val cam = CameraUVC(this, device)
+        cam.setUsbControlBlock(ctrlBlock)
+        cam.setCameraStateCallBack(object : ICameraStateCallBack {
+            override fun onCameraState(self: MultiCameraClient.ICamera, code: ICameraStateCallBack.State, msg: String?) {
+                runOnUiThread {
+                    when (code) {
+                        ICameraStateCallBack.State.OPENED -> {
+                            val req = self.getCameraRequest()
+                            val h = req?.previewHeight ?: 0
+                            resolutionLabel = when {
+                                h >= 2160 -> "4K"
+                                h >= 1080 -> "Full HD"
+                                h > 0 -> "${req?.previewWidth}×$h"
+                                else -> ""
+                            }
+                            updateSettingsText()
+                            toast("Câmera USB conectada (${device.productName ?: "UVC"}).")
+                        }
+                        ICameraStateCallBack.State.ERROR -> {
+                            usbRequested = false
+                            toast("Erro na câmera USB: ${msg ?: "desconhecido"}")
+                        }
+                        else -> Unit
+                    }
+                }
+            }
+        })
+        val request = CameraRequest.Builder()
+            .setPreviewWidth(if (prefs.uhd) 3840 else 1920)
+            .setPreviewHeight(if (prefs.uhd) 2160 else 1080)
+            .setRenderMode(CameraRequest.RenderMode.OPENGL)
+            .setAspectRatioShow(true)
+            .setAudioSource(
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO)
+                    == PackageManager.PERMISSION_GRANTED
+                ) CameraRequest.AudioSource.SOURCE_AUTO else CameraRequest.AudioSource.NONE
+            )
+            .setPreviewFormat(CameraRequest.PreviewFormat.FORMAT_MJPEG)
+            .setRawPreviewData(false)
+            .setCaptureRawImage(false)
+            .create()
+        usbCamera = cam
+        cam.openCamera(findViewById<AspectRatioTextureView>(R.id.usbView), request)
+    }
+
+    private fun usbStartRecording() {
+        val cam = usbCamera
+        if (cam == null || !cam.isCameraOpened()) {
+            toast("A câmera USB ainda não está pronta.")
+            return
+        }
+        usbSession = true
+        isPaused = false
+        usbSegment = 0
+        usbAccumMs = 0L
+        usbBaseName = "Teleprompter_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        sizeLimited = prefs.claudeMode
+        findViewById<View>(R.id.sizeRow).visibility = if (sizeLimited) View.VISIBLE else View.GONE
+        updateSizeBar(0L, 0f)
+        usbStartSegment()
+        startScroll()
+        updateUi()
+        handler.post(usbTicker)
+    }
+
+    /** Cada trecho entre pausas vira um arquivo (a câmera USB não pausa dentro do mesmo arquivo). */
+    private fun usbStartSegment() {
+        val cam = usbCamera ?: return
+        usbSegment++
+        val dir = getExternalFilesDir(Environment.DIRECTORY_MOVIES) ?: filesDir
+        val name = if (usbSegment == 1) usbBaseName else "${usbBaseName}_parte$usbSegment"
+        val base = File(dir, name)
+        usbCurrentFile = File(base.absolutePath + ".mp4")
+        usbSegmentStartMs = System.currentTimeMillis()
+        cam.captureVideoStart(object : ICaptureCallBack {
+            override fun onBegin() {}
+            override fun onError(error: String?) {
+                runOnUiThread { toast("Erro ao gravar na câmera USB: ${error ?: ""}") }
+            }
+            override fun onComplete(path: String?) {
+                val f = path?.let { File(it) } ?: return
+                Thread { publishToGallery(f) }.start()
+            }
+        }, base.absolutePath, 0L)
+    }
+
+    private fun usbStopSegment() {
+        usbAccumMs += System.currentTimeMillis() - usbSegmentStartMs
+        usbCamera?.captureVideoStop()
+    }
+
+    private fun usbStopRecording() {
+        if (!usbSession) return
+        if (!isPaused) usbStopSegment()
+        usbSession = false
+        isPaused = false
+        handler.removeCallbacks(usbTicker)
+        stopScroll()
+        findViewById<View>(R.id.sizeRow).visibility = View.GONE
+        hideSizeCountdown()
+        updateUi()
+    }
+
+    private fun usbTogglePause() {
+        if (!usbSession) return
+        if (isPaused) {
+            isPaused = false
+            usbStartSegment()
+            startScroll()
+        } else {
+            isPaused = true
+            usbStopSegment()
+            stopScroll()
+        }
+        updateUi()
+    }
+
+    private val usbTicker = object : Runnable {
+        override fun run() {
+            if (!usbSession) return
+            val elapsedMs = usbAccumMs + if (isPaused) 0L else System.currentTimeMillis() - usbSegmentStartMs
+            val sec = (elapsedMs / 1000).toInt()
+            updateTimer(sec)
+            if (limitSec > 0 && sec >= limitSec) {
+                usbStopRecording()
+                return
+            }
+            if (sizeLimited && !isPaused) {
+                val bytes = usbCurrentFile?.length() ?: 0L
+                val segSecs = (System.currentTimeMillis() - usbSegmentStartMs) / 1000f
+                updateSizeBar(bytes, segSecs)
+                if (bytes >= SOFT_LIMIT_BYTES) {
+                    usbStopRecording()
+                    return
+                }
+            }
+            handler.postDelayed(this, 500)
+        }
+    }
+
+    /** Copia o vídeo gravado para a galeria (Movies/Teleprompter) e apaga a cópia temporária. */
+    private fun publishToGallery(file: File) {
+        try {
+            if (!file.exists() || file.length() == 0L) return
+            val values = ContentValues().apply {
+                put(MediaStore.MediaColumns.DISPLAY_NAME, file.name)
+                put(MediaStore.MediaColumns.MIME_TYPE, "video/mp4")
+                put(MediaStore.MediaColumns.RELATIVE_PATH, "Movies/Teleprompter")
+                put(MediaStore.MediaColumns.IS_PENDING, 1)
+            }
+            val uri = contentResolver.insert(MediaStore.Video.Media.EXTERNAL_CONTENT_URI, values) ?: return
+            contentResolver.openOutputStream(uri)?.use { out -> file.inputStream().use { it.copyTo(out) } }
+            contentResolver.update(uri, ContentValues().apply { put(MediaStore.MediaColumns.IS_PENDING, 0) }, null, null)
+            file.delete()
+            runOnUiThread { toast("Vídeo salvo na galeria (Movies/Teleprompter).") }
+        } catch (e: Exception) {
+            Log.e(TAG, "Falha ao salvar vídeo USB", e)
+            runOnUiThread { toast("Não foi possível salvar o vídeo: ${e.message}") }
+        }
+    }
+
     // ---------- Gravação ----------
     private fun onRecordClicked() {
         if (isFinalizing) return
@@ -803,7 +1112,7 @@ class RecordActivity : AppCompatActivity() {
             applyGuideState()
         }
         textPanel.visibility = View.GONE
-        if (recording != null) {
+        if (isActive) {
             stopRecording()
         } else if (countdownText.visibility == View.VISIBLE) {
             // Toque durante a contagem cancela
@@ -844,6 +1153,10 @@ class RecordActivity : AppCompatActivity() {
 
     @SuppressLint("MissingPermission")
     private fun startRecording() {
+        if (usbMode) {
+            usbStartRecording()
+            return
+        }
         val vc = videoCapture ?: return
         val name = "Teleprompter_" + SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val values = ContentValues().apply {
@@ -914,6 +1227,10 @@ class RecordActivity : AppCompatActivity() {
     }
 
     private fun stopRecording() {
+        if (usbMode) {
+            usbStopRecording()
+            return
+        }
         val r = recording ?: return
         recording = null
         isFinalizing = true
@@ -923,6 +1240,10 @@ class RecordActivity : AppCompatActivity() {
     }
 
     private fun togglePause() {
+        if (usbMode) {
+            usbTogglePause()
+            return
+        }
         val r = recording ?: return
         if (isPaused) {
             r.resume()
@@ -937,7 +1258,7 @@ class RecordActivity : AppCompatActivity() {
     }
 
     private fun onOpenPalmGesture() {
-        if (recording != null) {
+        if (isActive) {
             togglePause()
             toast(if (isPaused) "✋ Pausado" else "✋ Gravando")
         }
@@ -984,12 +1305,12 @@ class RecordActivity : AppCompatActivity() {
         val elapsed = fmt(sec)
         val base = if (limitSec > 0) "$elapsed / ${fmt(limitSec)}" else elapsed
         timerText.text = when {
-            recording != null && isPaused -> "⏸ $base"
-            recording != null -> "● $base"
+            isActive && isPaused -> "⏸ $base"
+            isActive -> "● $base"
             else -> base
         }
         timerText.setTextColor(
-            if (recording != null && !isPaused) Color.rgb(255, 82, 82) else Color.WHITE
+            if (isActive && !isPaused) Color.rgb(255, 82, 82) else Color.WHITE
         )
     }
 
@@ -1004,7 +1325,7 @@ class RecordActivity : AppCompatActivity() {
         border.alpha = 1f
         pill.alpha = 1f
         when {
-            recording != null && isPaused -> {
+            isActive && isPaused -> {
                 border.setBackgroundResource(R.drawable.bg_border_pause)
                 border.visibility = View.VISIBLE
                 pill.setBackgroundResource(R.drawable.bg_pill_pause)
@@ -1018,7 +1339,7 @@ class RecordActivity : AppCompatActivity() {
                     start()
                 }
             }
-            recording != null -> {
+            isActive -> {
                 border.setBackgroundResource(R.drawable.bg_border_rec)
                 border.visibility = View.VISIBLE
                 pill.setBackgroundResource(R.drawable.bg_pill_rec)
@@ -1035,7 +1356,7 @@ class RecordActivity : AppCompatActivity() {
 
     private fun updateUi() {
         updateStatusIndicators()
-        val active = recording != null
+        val active = isActive
         recordBtn.text = if (active) "■" else "REC"
         recordBtn.textSize = if (active) 26f else 16f
         recordBtn.isEnabled = !isFinalizing

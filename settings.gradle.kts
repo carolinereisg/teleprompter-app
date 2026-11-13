@@ -13,4 +13,4 @@ dependencyResolutionManagement {
     }
 }
 rootProject.name = "Teleprompter"
-include(":app")
+include(":app", ":libausbc", ":libuvc")

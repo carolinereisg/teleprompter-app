@@ -10,6 +10,20 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Imagem da câmera USB (Insta360 etc.), usada no lugar da câmera do celular -->
+    <FrameLayout
+        android:id="@+id/usbContainer"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone">
+
+        <com.jiangdg.ausbc.widget.AspectRatioTextureView
+            android:id="@+id/usbView"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center" />
+    </FrameLayout>
+
     <!-- Teleprompter em tela cheia, com fundo semitransparente -->
     <ScrollView
         android:id="@+id/prompterScroll"
